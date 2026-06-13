@@ -1,0 +1,195 @@
+"use client";
+
+import React, { useState } from "react";
+import { MessageSquare, Globe, X, FileSpreadsheet, Loader2, ArrowRight } from "lucide-react";
+import { RecentOrder, OrderDetail } from "@/hooks/useDashboardData";
+
+interface RecentOrdersProps {
+  orders: RecentOrder[];
+  fetchOrderDetails: (id: string) => Promise<void>;
+  selectedOrderDetails: OrderDetail[] | null;
+  loadingDetails: boolean;
+  closeDetails: () => void;
+}
+
+export default function RecentOrders({
+  orders,
+  fetchOrderDetails,
+  selectedOrderDetails,
+  loadingDetails,
+  closeDetails
+}: RecentOrdersProps) {
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [selectedOrderNo, setSelectedOrderNo] = useState<string>("");
+
+  const handleOrderIdClick = async (order: RecentOrder) => {
+    setSelectedOrderId(order.id);
+    setSelectedOrderNo(order.order_id);
+    await fetchOrderDetails(order.id);
+  };
+
+  const formatCurrency = (val: number) => {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 0
+    }).format(val);
+  };
+
+  return (
+    <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-full">
+      {/* Table Header */}
+      <div className="flex items-center justify-between pb-4 border-b border-dashboard-border mb-4">
+        <h3 className="font-bold text-slate-800 text-base">Recent Orders</h3>
+        <button className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
+          <span>View all</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* Grid Table */}
+      <div className="flex-1 overflow-x-auto">
+        <table className="w-full text-left text-sm border-collapse">
+          <thead>
+            <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50">
+              <th className="py-3 px-4">Order ID</th>
+              <th className="py-3 px-4">Customer</th>
+              <th className="py-3 px-4 text-center">Channel</th>
+              <th className="py-3 px-4 text-right">Amount</th>
+              <th className="py-3 px-4 text-center">Status</th>
+              <th className="py-3 px-4">ETA</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {orders.map((order) => (
+              <tr key={order.id} className="hover:bg-slate-50/70 transition-colors group">
+                <td className="py-3.5 px-4 font-semibold text-brand-blue hover:text-brand-blueHover">
+                  <button
+                    onClick={() => handleOrderIdClick(order)}
+                    className="hover:underline text-left text-sm cursor-pointer focus:outline-none"
+                  >
+                    {order.order_id}
+                  </button>
+                </td>
+                <td className="py-3.5 px-4 font-medium text-slate-700 max-w-[180px] truncate">
+                  {order.customer}
+                </td>
+                <td className="py-3.5 px-4 text-center">
+                  <div className="flex items-center justify-center">
+                    {order.channel.toLowerCase() === "whatsapp" ? (
+                      <div className="w-7 h-7 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-sm" title="WhatsApp Channel">
+                        <MessageSquare className="w-4 h-4" />
+                      </div>
+                    ) : (
+                      <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shadow-sm" title="Portal Channel">
+                        <Globe className="w-4 h-4" />
+                      </div>
+                    )}
+                  </div>
+                </td>
+                <td className="py-3.5 px-4 text-right font-bold text-slate-800">
+                  {formatCurrency(order.amount)}
+                </td>
+                <td className="py-3.5 px-4 text-center">
+                  <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none ${
+                    order.status === "Confirmed"
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      : "bg-amber-50 text-amber-700 border border-amber-200"
+                  }`}>
+                    {order.status}
+                  </span>
+                </td>
+                <td className="py-3.5 px-4 text-xs font-semibold text-slate-500">
+                  {order.eta}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Slide-out Sidebar Drawer for Line Item Details */}
+      {selectedOrderId && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 transition-opacity flex justify-end">
+          {/* Backdrop Click */}
+          <div className="flex-1" onClick={closeDetails}></div>
+
+          {/* Drawer Content */}
+          <div className="w-[500px] bg-white h-screen shadow-2xl flex flex-col animate-slide-in relative border-l border-slate-200">
+            {/* Drawer Header */}
+            <div className="p-6 border-b border-dashboard-border flex items-center justify-between bg-brand-dark text-white">
+              <div>
+                <h3 className="font-bold text-lg">Order Details</h3>
+                <p className="text-xs text-brand-textMuted mt-0.5">ID: {selectedOrderNo}</p>
+              </div>
+              <button
+                onClick={closeDetails}
+                className="p-1.5 rounded-full hover:bg-brand-darkHover text-brand-textMuted hover:text-white transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Line Items Container */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {loadingDetails ? (
+                <div className="flex flex-col items-center justify-center h-48 gap-3">
+                  <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
+                  <span className="text-sm font-semibold text-slate-500">Loading line items...</span>
+                </div>
+              ) : selectedOrderDetails ? (
+                <>
+                  <h4 className="font-bold text-slate-800 text-sm border-b pb-2 mb-3">Line Items</h4>
+                  {selectedOrderDetails.map((item, idx) => (
+                    <div key={idx} className="p-4 rounded-xl border border-dashboard-border bg-slate-50/50 flex flex-col justify-between gap-2">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="font-bold text-sm text-slate-800">{item.brand} SKU</p>
+                          <p className="text-xs text-slate-400 font-semibold">{item.sku_id} ({item.pack_size})</p>
+                        </div>
+                        <span className="text-xs font-bold text-slate-500">Qty: {item.quantity}</span>
+                      </div>
+                      
+                      <div className="flex items-center justify-between border-t border-dashed border-slate-200 pt-2 mt-1">
+                        <span className="text-xs text-slate-400">Rate: {formatCurrency(item.unit_price)}</span>
+                        <span className="text-sm font-bold text-slate-800">{formatCurrency(item.total_price)}</span>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Financial Summary */}
+                  <div className="border-t border-slate-200 pt-4 mt-6 space-y-2 text-sm">
+                    <div className="flex justify-between text-slate-500 font-medium">
+                      <span>Subtotal</span>
+                      <span>{formatCurrency(selectedOrderDetails.reduce((a, b) => a + b.total_price, 0) / 1.18)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500 font-medium">
+                      <span>GST (18%)</span>
+                      <span>{formatCurrency(selectedOrderDetails.reduce((a, b) => a + b.total_price, 0) * 0.18 / 1.18)}</span>
+                    </div>
+                    <div className="flex justify-between text-base font-extrabold text-slate-800 pt-2 border-t border-dashed">
+                      <span>Total Amount</span>
+                      <span>{formatCurrency(selectedOrderDetails.reduce((a, b) => a + b.total_price, 0))}</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center text-slate-400 py-12">No details available.</div>
+              )}
+            </div>
+
+            {/* Close footer button */}
+            <div className="p-6 border-t border-dashboard-border bg-slate-50 flex items-center justify-end">
+              <button
+                onClick={closeDetails}
+                className="px-5 py-2.5 bg-slate-800 text-white hover:bg-slate-700 text-sm font-bold rounded-lg transition-all"
+              >
+                Close Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
