@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 export interface DashboardMetrics {
   total_sales: number;
@@ -57,19 +57,19 @@ export function useDashboardData(activeTenantId: string) {
   const fetchStaticData = useCallback(async () => {
     try {
       // Fetch Metrics
-      const metricsResp = await fetch(`${BASE_URL}/dashboard/metrics?tenant_id=${activeTenantId}`);
+      const metricsResp = await fetch(`${BASE_URL}/api/v1/dashboard/metrics?tenant_id=${activeTenantId}`);
       if (!metricsResp.ok) throw new Error("Failed to fetch dashboard metrics");
       const metricsData = await metricsResp.json();
       setMetrics(metricsData);
 
       // Fetch Recent Orders
-      const ordersResp = await fetch(`${BASE_URL}/dashboard/recent-orders?tenant_id=${activeTenantId}`);
+      const ordersResp = await fetch(`${BASE_URL}/api/v1/dashboard/recent-orders?tenant_id=${activeTenantId}`);
       if (!ordersResp.ok) throw new Error("Failed to fetch recent orders");
       const ordersData = await ordersResp.json();
       setRecentOrders(ordersData);
 
       // Fetch Donut Data
-      const donutResp = await fetch(`${BASE_URL}/dashboard/collections-donut?tenant_id=${activeTenantId}`);
+      const donutResp = await fetch(`${BASE_URL}/api/v1/dashboard/collections-donut?tenant_id=${activeTenantId}`);
       if (!donutResp.ok) throw new Error("Failed to fetch collections donut");
       const donutResData = await donutResp.json();
       setDonutData(donutResData);
@@ -84,7 +84,7 @@ export function useDashboardData(activeTenantId: string) {
   const fetchPolledData = useCallback(async () => {
     try {
       // Fetch Activity Feed (Polled)
-      const activityResp = await fetch(`${BASE_URL}/dashboard/recent-activity?tenant_id=${activeTenantId}`);
+      const activityResp = await fetch(`${BASE_URL}/api/v1/dashboard/recent-activity?tenant_id=${activeTenantId}`);
       if (activityResp.ok) {
         const activityData = await activityResp.json();
         setActivities(activityData);
@@ -97,7 +97,7 @@ export function useDashboardData(activeTenantId: string) {
   const fetchOrderDetails = async (orderId: string) => {
     setLoadingDetails(true);
     try {
-      const resp = await fetch(`${BASE_URL}/dashboard/order-details/${orderId}`);
+      const resp = await fetch(`${BASE_URL}/api/v1/dashboard/order-details/${orderId}`);
       if (!resp.ok) throw new Error("Failed to load order line item details");
       const data = await resp.json();
       setSelectedOrderDetails(data);
