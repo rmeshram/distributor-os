@@ -2,18 +2,18 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.database import engine, Base
-import app.models  # Register all models on Base.metadata
 
-# Auto-initialize database schema
+# CRITICAL: Force table lifecycle creation on server startup
+# This scans all registered ORM models and creates the tables instantly if missing
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="DistributorOS API Backend",
-    description="AI-Native Distribution Operating System for India",
-    version="2.0.0"
+    title="Distributor OS API",
+    description="Multi-tenant backend platform for supply chain distributors",
+    version="1.0.0"
 )
 
-# Enable CORS for frontend web requests
+# Enforce open CORS configuration so cloud frontend can query seamlessly
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,12 +22,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include the API router
-app.include_router(api_router)
+app.include_router(api_router, prefix="/api/v1")
 
 @app.get("/")
 def read_root():
-    return {
-        "message": "Welcome to DistributorOS Backend Core API",
-        "documentation": "/docs"
-    }
+    return {"status": "healthy", "service": "Distributor OS Backend Core"}
