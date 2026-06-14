@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Truck, MapPin, Navigation, Info, ArrowRight } from "lucide-react";
+import Link from "next/link";
 
 interface DeliveryMarker {
   id: string;
@@ -14,7 +15,11 @@ interface DeliveryMarker {
   y: number; // percentage
 }
 
-export default function LiveDeliveries() {
+interface LiveDeliveriesProps {
+  viewAllHref?: string;
+}
+
+export default function LiveDeliveries({ viewAllHref }: LiveDeliveriesProps = {}) {
   const [activeMarker, setActiveMarker] = useState<DeliveryMarker | null>(null);
 
   const deliveries: DeliveryMarker[] = [
@@ -36,10 +41,17 @@ export default function LiveDeliveries() {
           </span>
           <span className="text-xs font-semibold text-emerald-600">Live</span>
         </div>
-        <button className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
-          <span>View all deliveries</span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
+        {viewAllHref ? (
+          <Link href={viewAllHref} className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
+            <span>View all</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        ) : (
+          <button className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
+            <span>View all deliveries</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Interactive Map Canvas */}

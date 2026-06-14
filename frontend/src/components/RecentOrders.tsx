@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { MessageSquare, Globe, X, FileSpreadsheet, Loader2, ArrowRight, AlertCircle } from "lucide-react";
 import { RecentOrder, OrderDetail } from "@/hooks/useDashboardData";
+import Link from "next/link";
 
 interface RecentOrdersProps {
   orders: RecentOrder[];
@@ -13,6 +14,7 @@ interface RecentOrdersProps {
   onSuccess: (msg: string) => void;
   onError: (msg: string) => void;
   activeTenantId?: string;
+  viewAllHref?: string;
 }
 
 export default function RecentOrders({
@@ -23,7 +25,8 @@ export default function RecentOrders({
   closeDetails,
   onSuccess,
   onError,
-  activeTenantId
+  activeTenantId,
+  viewAllHref
 }: RecentOrdersProps) {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedOrderNo, setSelectedOrderNo] = useState<string>("");
@@ -125,10 +128,17 @@ export default function RecentOrders({
       {/* Table Header */}
       <div className="flex items-center justify-between pb-4 border-b border-dashboard-border mb-4">
         <h3 className="font-bold text-slate-800 text-base">Recent Orders</h3>
-        <button className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
-          <span>View all</span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
+        {viewAllHref ? (
+          <Link href={viewAllHref} className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
+            <span>View all</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        ) : (
+          <button className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
+            <span>View all</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Grid Table */}

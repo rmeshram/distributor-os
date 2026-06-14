@@ -132,25 +132,26 @@ export default function DashboardPage() {
                   console.error("Inventory/Order Adjustment Exception:", msg);
                 }}
                 activeTenantId={activeTenantId}
+                viewAllHref="/dashboard/orders"
               />
             </div>
 
             {/* Right Col: Collections Donut Chart (40% width) */}
             <div className="lg:col-span-2 min-h-[380px]">
-              <CollectionsDonut data={donutData} />
+              <CollectionsDonut data={donutData} viewReportHref="/dashboard/collections" />
             </div>
           </div>
 
           {/* C. Bottom Operational Grid (Live Map, Stock Summary, Activity Feed) */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="min-h-[300px]">
-              <LiveDeliveries />
+              <LiveDeliveries viewAllHref="/dashboard/shipments" />
             </div>
             <div className="min-h-[300px]">
               <InventorySummary />
             </div>
             <div className="min-h-[300px]">
-              <ActivityFeed activities={activities} />
+              <ActivityFeed activities={activities} viewAllHref="/dashboard/reports" />
             </div>
           </div>
         </main>

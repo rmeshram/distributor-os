@@ -11,12 +11,14 @@ import {
   ArrowRight
 } from "lucide-react";
 import { ActivityEvent } from "@/hooks/useDashboardData";
+import Link from "next/link";
 
 interface ActivityFeedProps {
   activities: ActivityEvent[];
+  viewAllHref?: string;
 }
 
-export default function ActivityFeed({ activities }: ActivityFeedProps) {
+export default function ActivityFeed({ activities, viewAllHref }: ActivityFeedProps) {
   // Map event categories to visual icons and styles
   const getCategoryStyles = (category: string) => {
     switch (category.toLowerCase()) {
@@ -58,10 +60,17 @@ export default function ActivityFeed({ activities }: ActivityFeedProps) {
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-dashboard-border mb-3">
         <h3 className="font-bold text-slate-800 text-base">Recent Activity</h3>
-        <button className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
-          <span>View all</span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
+        {viewAllHref ? (
+          <Link href={viewAllHref} className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
+            <span>View all</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        ) : (
+          <button className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
+            <span>View all</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Activity Timeline List */}

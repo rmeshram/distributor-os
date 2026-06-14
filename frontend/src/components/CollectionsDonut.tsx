@@ -4,14 +4,16 @@ import React from "react";
 import { ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { AlertTriangle, ArrowRight } from "lucide-react";
 import { DonutSegment } from "@/hooks/useDashboardData";
+import Link from "next/link";
 
 interface CollectionsDonutProps {
   data: DonutSegment[];
+  viewReportHref?: string;
 }
 
 const COLORS = ["#10b981", "#f59e0b", "#ef4444", "#8b5cf6"]; // Green, Amber, Red, Purple
 
-export default function CollectionsDonut({ data }: CollectionsDonutProps) {
+export default function CollectionsDonut({ data, viewReportHref }: CollectionsDonutProps) {
   // Sum outstanding total
   const totalOutstanding = data.reduce((sum, item) => sum + item.value, 0);
 
@@ -26,10 +28,17 @@ export default function CollectionsDonut({ data }: CollectionsDonutProps) {
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-dashboard-border mb-3">
         <h3 className="font-bold text-slate-800 text-base">Collections Overview</h3>
-        <button className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
-          <span>View report</span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
+        {viewReportHref ? (
+          <Link href={viewReportHref} className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
+            <span>View report</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        ) : (
+          <button className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
+            <span>View report</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-1">
