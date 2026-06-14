@@ -76,91 +76,114 @@ def handle_whatsapp_webhook(
         gemini_service = GeminiService()
         parsed_order = gemini_service.parse_order_text(payload.message_text)
 
-        parsed_items = []
+        raw_tokens = []
         if parsed_order.items:
             for item in parsed_order.items:
-                p_name = item.raw_product_name
-                qty = item.quantity
-                
-                # Determine properties based on product name mapping
-                if "stayfree" in p_name.lower() or "pad" in p_name.lower():
-                    rate = 1250.0
-                    sku = "PROD-STAYFREE-XL"
-                    brand = "Stayfree"
-                    category = "Personal Care"
-                    pack_size = "Pack of 20"
-                elif "maggi" in p_name.lower():
-                    rate = 450.0
-                    sku = "PROD-MAGGI-PACK"
-                    brand = "Nestle"
-                    category = "Packaged Foods"
-                    pack_size = "Pack of 12"
-                elif "soap" in p_name.lower() or "tata" in p_name.lower():
-                    rate = 47.3
-                    sku = "PROD-HUL-SOAP"
-                    brand = "HUL"
-                    category = "Soap"
-                    pack_size = "100g"
-                else:
-                    rate = 189.0
-                    sku = "PROD-GENERIC"
-                    brand = "Generic"
-                    category = "Grocery"
-                    pack_size = "1 unit"
-                
-                parsed_items.append({
-                    "product_name": p_name,
-                    "sku_code": sku,
-                    "brand": brand,
-                    "category": category,
-                    "pack_size": pack_size,
-                    "qty": qty,
-                    "rate": rate
+                raw_tokens.append({
+                    "text_token": item.raw_product_name,
+                    "qty": item.quantity
                 })
 
         # Fallback multi-token detection if no items parsed dynamically
-        if not parsed_items:
+        if not raw_tokens:
             if "stayfree" in msg or "pad" in msg:
-                parsed_items.append({
-                    "product_name": "Stayfree Sanitary Napkins (XL)",
-                    "sku_code": "PROD-STAYFREE-XL",
-                    "brand": "Stayfree",
-                    "category": "Personal Care",
-                    "pack_size": "Pack of 20",
-                    "qty": 10,
-                    "rate": 1250.0
-                })
+                raw_tokens.append({"text_token": "Stayfree Sanitary Napkins (XL)", "qty": 10})
             if "maggi" in msg:
-                parsed_items.append({
-                    "product_name": "Maggi 2-Min Noodles",
-                    "sku_code": "PROD-MAGGI-PACK",
-                    "brand": "Nestle",
-                    "category": "Packaged Foods",
-                    "pack_size": "Pack of 12",
-                    "qty": 100,
-                    "rate": 450.0
-                })
+                raw_tokens.append({"text_token": "Maggi 2-Min Noodles", "qty": 100})
             if "soap" in msg or "tata" in msg:
-                parsed_items.append({
-                    "product_name": "Tata Premium Soap",
-                    "sku_code": "PROD-HUL-SOAP",
-                    "brand": "HUL",
-                    "category": "Soap",
-                    "pack_size": "100g",
-                    "qty": 500,
-                    "rate": 47.3
-                })
+                raw_tokens.append({"text_token": "Tata Premium Soap", "qty": 500})
             
             # Fallback if absolutely no keywords matched
-            if not parsed_items:
+            if not raw_tokens:
+                raw_tokens.append({"text_token": "Wholesale SKU Ingestion", "qty": 100})
+
+        # 3. Match items against database catalog and populate parsed_items
+        parsed_items = []
+        has_unmatched = False
+
+        # Helper to get the best product from alias query results, avoiding MOCK products if possible
+        def get_best_product_for_alias_query(query):
+            matches = query.all()
+            if not matches:
+                return None
+            for am in matches:
+                p = db.query(Product).filter_by(id=am.product_id).first()
+                if p and "MOCK" not in p.sku_id:
+                    return p
+            return db.query(Product).filter_by(id=matches[0].product_id).first()
+
+        # Helper to get the best product from product query results, avoiding MOCK products if possible
+        def get_best_product_for_prod_query(query):
+            matches = query.all()
+            if not matches:
+                return None
+            for p in matches:
+                if "MOCK" not in p.sku_id:
+                    return p
+            return matches[0]
+
+        for token_entry in raw_tokens:
+            token = token_entry["text_token"]
+            qty = token_entry["qty"]
+
+            # Try finding the product in the database using case-insensitive match
+            # 1. Exact match on ProductAlias alias_name
+            product = get_best_product_for_alias_query(
+                db.query(ProductAlias).filter(ProductAlias.alias_name.ilike(token))
+            )
+
+            # 2. Exact match on Product sku_id
+            if not product:
+                product = get_best_product_for_prod_query(
+                    db.query(Product).filter(Product.sku_id.ilike(token))
+                )
+
+            # 3. Partial match on ProductAlias
+            if not product:
+                product = get_best_product_for_alias_query(
+                    db.query(ProductAlias).filter(ProductAlias.alias_name.ilike(f"%{token}%"))
+                )
+
+            # 4. Partial match on Product sku_id
+            if not product:
+                product = get_best_product_for_prod_query(
+                    db.query(Product).filter(Product.sku_id.ilike(f"%{token}%"))
+                )
+
+            # 5. Reverse word overlap matching if still not found
+            if not product:
+                words = [w.strip() for w in token.split() if len(w.strip()) > 2]
+                for w in words:
+                    if w.lower() in ["and", "the", "for", "please", "send", "need", "urgent", "with", "immediately", "box", "pack", "packet"]:
+                        continue
+                    product = get_best_product_for_alias_query(
+                        db.query(ProductAlias).filter(ProductAlias.alias_name.ilike(f"%{w}%"))
+                    )
+                    if product:
+                        break
+
+            if product:
+                # Found State: Pull catalog values from the database
                 parsed_items.append({
-                    "product_name": "Wholesale SKU Ingestion",
-                    "sku_code": "PROD-GENERIC",
+                    "product_name": token,
+                    "sku_code": product.sku_id,
+                    "brand": product.brand,
+                    "category": product.category,
+                    "pack_size": product.pack_size,
+                    "qty": qty,
+                    "rate": float(product.base_price)
+                })
+            else:
+                # Unmatched State
+                has_unmatched = True
+                parsed_items.append({
+                    "product_name": f"Unmatched: {token}",
+                    "sku_code": "UNMATCHED_SKU",
                     "brand": "Generic",
                     "category": "Grocery",
                     "pack_size": "1 unit",
-                    "qty": 100,
-                    "rate": 189.0
+                    "qty": qty,
+                    "rate": 0.0
                 })
 
         # 3. Create unique Parent Order ID string
@@ -214,12 +237,16 @@ def handle_whatsapp_webhook(
                 unit_price=item["rate"]
             ))
 
+        # Parent State Conditionals
+        order_status = "Needs Review" if has_unmatched else "Draft"
+        new_order.status = order_status
+
         # Record state transition (maps to Pending status in Recent Orders UI)
         db.add(OrderStateLedger(
             tenant_id=resolved_tenant_id,
             order_id=new_order.id,
             from_status=None,
-            to_status="Draft",
+            to_status=order_status,
             updated_by="system_whatsapp_agent"
         ))
 

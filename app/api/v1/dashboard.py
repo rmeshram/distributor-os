@@ -67,9 +67,11 @@ def ensure_demo_data(db: Session):
 
     # Seed Products
     products_data = [
-        {"id": uuid.UUID("a1010000-0000-0000-0000-000000000001"), "sku_id": "PROD-HUL-SOAP", "brand": "HUL", "category": "Soap", "pack_size": "100g", "base_price": 45.00, "alias": "HUL Soap"},
-        {"id": uuid.UUID("a1010000-0000-0000-0000-000000000002"), "sku_id": "PROD-ITC-AATA", "brand": "ITC", "category": "Flour", "pack_size": "5kg", "base_price": 260.00, "alias": "ITC Aashirvaad Aata"},
-        {"id": uuid.UUID("a1010000-0000-0000-0000-000000000003"), "sku_id": "PROD-ITC-CHIPS", "brand": "ITC", "category": "Chips", "pack_size": "50g", "base_price": 10.00, "alias": "Chips"}
+        {"id": uuid.UUID("a1010000-0000-0000-0000-000000000001"), "sku_id": "PROD-HUL-SOAP", "brand": "HUL", "category": "Soap", "pack_size": "100g", "base_price": 45.00, "aliases": ["HUL Soap", "Tata Premium Soap"]},
+        {"id": uuid.UUID("a1010000-0000-0000-0000-000000000002"), "sku_id": "PROD-ITC-AATA", "brand": "ITC", "category": "Flour", "pack_size": "5kg", "base_price": 260.00, "aliases": ["ITC Aashirvaad Aata"]},
+        {"id": uuid.UUID("a1010000-0000-0000-0000-000000000003"), "sku_id": "PROD-ITC-CHIPS", "brand": "ITC", "category": "Chips", "pack_size": "50g", "base_price": 10.00, "aliases": ["Chips"]},
+        {"id": uuid.UUID("a1010000-0000-0000-0000-000000000004"), "sku_id": "PROD-STAYFREE-XL", "brand": "Stayfree", "category": "Sanitary", "pack_size": "XL", "base_price": 1250.00, "aliases": ["Stayfree Sanitary Napkins (XL)", "Stayfree pad", "Stayfree"]},
+        {"id": uuid.UUID("a1010000-0000-0000-0000-000000000005"), "sku_id": "PROD-MAGGI-PACK", "brand": "Nestle", "category": "Packaged Foods", "pack_size": "Pack of 12", "base_price": 450.00, "aliases": ["Maggi 2-Min Noodles", "Nestle Maggi", "Maggi"]}
     ]
 
     for p in products_data:
@@ -84,9 +86,10 @@ def ensure_demo_data(db: Session):
         )
         db.add(prod)
         db.flush()
-        # Alias
-        alias = ProductAlias(tenant_id=DEMO_TENANT_ID, product_id=prod.id, alias_name=p["alias"])
-        db.add(alias)
+        # Aliases
+        for alias_name in p["aliases"]:
+            alias = ProductAlias(tenant_id=DEMO_TENANT_ID, product_id=prod.id, alias_name=alias_name)
+            db.add(alias)
 
         # Inventory
         inv = Inventory(
