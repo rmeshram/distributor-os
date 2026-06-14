@@ -89,3 +89,87 @@ def update_order_status(
             status_code=500,
             detail=f"Status update transaction crash: {str(e)}"
         )
+
+
+class ItemResolvePayload(BaseModel):
+    sku_code: str
+    quantity: int
+
+@router.patch("/items/{item_id}/resolve", status_code=status.HTTP_200_OK)
+def resolve_order_item(
+    item_id: uuid.UUID,
+    payload: ItemResolvePayload,
+    db: Session = Depends(get_db)
+):
+    """
+    Manually resolves an unmatched order item to a valid database product SKU
+    and triggers parent order status recalculation.
+    """
+    # 1. Look up the OrderLineItem by ID
+    item = db.get(OrderLineItem, item_id)
+    if not item:
+        raise HTTPException(
+            status_code=404,
+            detail="Order item not found"
+        )
+        
+    order = db.get(Order, item.order_id)
+    if not order:
+        raise HTTPException(
+            status_code=404,
+            detail="Parent order not found"
+        )
+
+    # Set tenant isolation context
+    tenant_context.set(order.tenant_id)
+
+    # 2. Fetch target profile from the Product table using the new sku_code
+    product = db.query(Product).filter(Product.sku_id == payload.sku_code).first()
+    if not product:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Product with SKU '{payload.sku_code}' not found."
+        )
+
+    # 3. Overwrite the order item's fields
+    item.product_id = product.id
+    item.quantity = payload.quantity
+    item.unit_price = product.base_price
+
+    # Force database write to see current items in query
+    db.flush()
+
+    # 4. Recalculate if there are any other unmatched items in this order
+    all_items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order.id).all()
+    has_remaining_unmatched = False
+    for i in all_items:
+        prod = db.get(Product, i.product_id)
+        if prod and prod.sku_id == "UNMATCHED_SKU":
+            has_remaining_unmatched = True
+            break
+
+    current_status = order.current_status
+    new_status = current_status
+
+    # If all items in the order are now validly matched, automatically transition status
+    if not has_remaining_unmatched and current_status == "Needs Review":
+        new_status = "Draft"  # Maps to "Pending" on the frontend
+        db.add(OrderStateLedger(
+            tenant_id=order.tenant_id,
+            order_id=order.id,
+            from_status=current_status,
+            to_status=new_status,
+            updated_by="operator"
+        ))
+
+    db.commit()
+    
+    return {
+        "status": "success",
+        "item_id": str(item.id),
+        "sku_code": payload.sku_code,
+        "quantity": payload.quantity,
+        "unit_price": float(product.base_price),
+        "order_status": "Pending" if new_status == "Draft" else new_status
+    }
+

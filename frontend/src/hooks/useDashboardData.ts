@@ -25,6 +25,7 @@ export interface RecentOrder {
 }
 
 export interface OrderDetail {
+  id: string;
   sku_id: string;
   brand: string;
   category: string;

@@ -176,3 +176,75 @@ def test_confirm_order_atomic_rollback(db_session, client):
     p2_db = db_session.get(Product, p2.id)
     assert p1_db.stock_quantity == 100
     assert p2_db.stock_quantity == 5
+
+
+def test_resolve_order_item(db_session, client):
+    # 1. Setup Tenant
+    tenant = DistributorTenant(name="Resolve Test Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # 2. Setup Products
+    p_valid = Product(sku_id="PROD-VALID", brand="HUL", category="Soap", pack_size="100g", base_price=45.0, stock_quantity=100)
+    p_unmatched = Product(sku_id="UNMATCHED_SKU", brand="Generic", category="Grocery", pack_size="1 unit", base_price=0.0)
+    db_session.add_all([p_valid, p_unmatched])
+    db_session.flush()
+
+    # 3. Setup Customer
+    cust = Customer(
+        retailer_name="Aggarwal Kirana", customer_id="C-4", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    # 4. Setup Order (Needs Review status)
+    order = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-RESOLVE-TEST-1",
+        source="WhatsApp",
+        customer_id=cust.id
+    )
+    db_session.add(order)
+    db_session.flush()
+
+    # Add unmatched line item
+    line_item = OrderLineItem(order_id=order.id, product_id=p_unmatched.id, quantity=10, unit_price=0.0)
+    db_session.add(line_item)
+    db_session.flush()
+
+    # Ledger transition: None -> Needs Review
+    db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Needs Review", updated_by="system_whatsapp_agent"))
+    db_session.commit()
+
+    # 5. Call resolve endpoint
+    payload = {
+        "sku_code": "PROD-VALID",
+        "quantity": 5
+    }
+
+    response = client.patch(
+        f"/api/v1/orders/items/{line_item.id}/resolve",
+        json=payload
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["sku_code"] == "PROD-VALID"
+    assert data["quantity"] == 5
+    assert data["unit_price"] == 45.0
+    assert data["order_status"] == "Pending"
+
+    # 6. Verify database state
+    db_session.expire_all()
+    item_db = db_session.get(OrderLineItem, line_item.id)
+    assert item_db.product_id == p_valid.id
+    assert item_db.quantity == 5
+    assert float(item_db.unit_price) == 45.0
+
+    order_db = db_session.get(Order, order.id)
+    assert order_db.current_status == "Draft"  # Maps to Pending
+

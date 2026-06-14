@@ -131,6 +131,7 @@ export default function DashboardPage() {
                   showToast(msg, "error");
                   console.error("Inventory/Order Adjustment Exception:", msg);
                 }}
+                activeTenantId={activeTenantId}
               />
             </div>
 

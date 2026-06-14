@@ -193,6 +193,7 @@ export default function DashboardPage() {
                   refreshAll();
                 }}
                 onError={(msg) => showToast(msg, "error")}
+                activeTenantId={activeTenantId}
               />
             </div>
 

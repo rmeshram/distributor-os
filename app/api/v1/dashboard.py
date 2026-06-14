@@ -314,6 +314,7 @@ def get_order_details(
     for item in items:
         prod = db.get(Product, item.product_id)
         details.append({
+            "id": str(item.id),
             "sku_id": prod.sku_id if prod else "UNKNOWN",
             "brand": prod.brand if prod else "",
             "category": prod.category if prod else "",

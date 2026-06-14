@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { MessageSquare, Globe, X, FileSpreadsheet, Loader2, ArrowRight } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { MessageSquare, Globe, X, FileSpreadsheet, Loader2, ArrowRight, AlertCircle } from "lucide-react";
 import { RecentOrder, OrderDetail } from "@/hooks/useDashboardData";
 
 interface RecentOrdersProps {
@@ -12,6 +12,7 @@ interface RecentOrdersProps {
   closeDetails: () => void;
   onSuccess: (msg: string) => void;
   onError: (msg: string) => void;
+  activeTenantId?: string;
 }
 
 export default function RecentOrders({
@@ -21,11 +22,57 @@ export default function RecentOrders({
   loadingDetails,
   closeDetails,
   onSuccess,
-  onError
+  onError,
+  activeTenantId
 }: RecentOrdersProps) {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedOrderNo, setSelectedOrderNo] = useState<string>("");
   const [isConfirming, setIsConfirming] = useState(false);
+
+  const [productsList, setProductsList] = useState<any[]>([]);
+  const [resolvingItemId, setResolvingItemId] = useState<string | null>(null);
+
+  const tenantId = activeTenantId || "d3b07384-d113-4956-a5d2-64be7357c11d";
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const res = await fetch(`${apiBase}/api/v1/products?tenant_id=${tenantId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setProductsList(data);
+        }
+      } catch (err) {
+        console.error("Failed to load products list for resolution drawer:", err);
+      }
+    };
+    fetchProducts();
+  }, [tenantId]);
+
+  const handleResolveItem = async (itemId: string, skuCode: string, quantity: number) => {
+    setResolvingItemId(itemId);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${apiBase}/api/v1/orders/items/${itemId}/resolve`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sku_code: skuCode, quantity })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        onSuccess("Order line item manually resolved successfully!");
+        handleClose();
+      } else {
+        const errorDetail = data.detail || "Failed to resolve order item.";
+        onError(errorDetail);
+      }
+    } catch (err) {
+      onError("Network connection breakdown during order item resolution.");
+    } finally {
+      setResolvingItemId(null);
+    }
+  };
 
   const selectedOrder = orders.find(o => o.id === selectedOrderId);
 
@@ -181,22 +228,58 @@ export default function RecentOrders({
               ) : selectedOrderDetails ? (
                 <>
                   <h4 className="font-bold text-slate-800 text-sm border-b pb-2 mb-3">Line Items</h4>
-                  {selectedOrderDetails.map((item, idx) => (
-                    <div key={idx} className="p-4 rounded-xl border border-dashboard-border bg-slate-50/50 flex flex-col justify-between gap-2">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <p className="font-bold text-sm text-slate-800">{item.brand} SKU</p>
-                          <p className="text-xs text-slate-400 font-semibold">{item.sku_id} ({item.pack_size})</p>
+                  {selectedOrderDetails.map((item, idx) => {
+                    const isUnmatched = item.sku_id === "UNMATCHED_SKU";
+                    return (
+                      <div key={idx} className="p-4 rounded-xl border border-dashboard-border bg-slate-50/50 flex flex-col justify-between gap-2">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 pr-4">
+                            {isUnmatched ? (
+                              <div className="space-y-2">
+                                <p className="font-bold text-sm text-rose-600 flex items-center gap-1.5 animate-pulse">
+                                  <AlertCircle className="w-4 h-4 shrink-0" />
+                                  <span>Unmatched Line Item</span>
+                                </p>
+                                <p className="text-[11px] text-slate-400 font-semibold mb-1">
+                                  Original Text: <span className="italic">"{item.brand} SKU"</span>
+                                </p>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase">Map to Catalog SKU</label>
+                                <select
+                                  disabled={resolvingItemId === item.id}
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      handleResolveItem(item.id, e.target.value, item.quantity);
+                                    }
+                                  }}
+                                  className="w-full mt-1 p-2 border border-rose-200 rounded-lg text-xs bg-white text-slate-700 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer animate-pulse"
+                                >
+                                  <option value="">-- Select SKU --</option>
+                                  {productsList.map((p) => (
+                                    <option key={p.id} value={p.sku_id}>
+                                      {p.sku_id} - {p.brand} {p.category} ({p.pack_size})
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            ) : (
+                              <>
+                                <p className="font-bold text-sm text-slate-800">{item.brand} SKU</p>
+                                <p className="text-xs text-slate-400 font-semibold">{item.sku_id} ({item.pack_size})</p>
+                              </>
+                            )}
+                          </div>
+                          <div className="flex flex-col items-end shrink-0">
+                            <span className="text-xs font-bold text-slate-500">Qty: {item.quantity}</span>
+                          </div>
                         </div>
-                        <span className="text-xs font-bold text-slate-500">Qty: {item.quantity}</span>
+                        
+                        <div className="flex items-center justify-between border-t border-dashed border-slate-200 pt-2 mt-1">
+                          <span className="text-xs text-slate-400">Rate: {formatCurrency(item.unit_price)}</span>
+                          <span className="text-sm font-bold text-slate-800">{formatCurrency(item.total_price)}</span>
+                        </div>
                       </div>
-                      
-                      <div className="flex items-center justify-between border-t border-dashed border-slate-200 pt-2 mt-1">
-                        <span className="text-xs text-slate-400">Rate: {formatCurrency(item.unit_price)}</span>
-                        <span className="text-sm font-bold text-slate-800">{formatCurrency(item.total_price)}</span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   {/* Financial Summary */}
                   <div className="border-t border-slate-200 pt-4 mt-6 space-y-2 text-sm">
