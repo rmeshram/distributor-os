@@ -1,10 +1,12 @@
 import uuid
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from app.database import get_db, tenant_context
 from app.models.user import User
 from app.api.v1.dashboard import ensure_demo_data
+from app.utils.security import hash_password
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -24,7 +26,11 @@ def get_users(
     if tenant_id:
         filters.append(User.tenant_id == tenant_id)
     if role:
-        filters.append(User.role == role)
+        # Case-insensitive mapping to maintain driver dropdown compatibility
+        if role.upper() == "DRIVER":
+            filters.append(User.role.in_(["DRIVER", "Driver"]))
+        else:
+            filters.append(User.role == role)
         
     if filters:
         query = query.filter(and_(*filters))
@@ -35,7 +41,66 @@ def get_users(
             "id": str(u.id),
             "full_name": u.full_name,
             "phone_number": u.phone_number,
-            "role": u.role
+            "email_or_phone": u.email_or_phone,
+            "role": u.role,
+            "is_active": u.is_active
         }
         for u in users
     ]
+
+class UserInvitePayload(BaseModel):
+    full_name: str = Field(..., min_length=1)
+    email_or_phone: str = Field(..., min_length=3)
+    role: str
+    password: str = Field(..., min_length=6)
+
+@router.post("/invite", status_code=status.HTTP_201_CREATED)
+def invite_user(
+    payload: UserInvitePayload,
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    tenant_context.set(tenant_id)
+    
+    valid_roles = {"SUPER_ADMIN", "FINANCE", "OPERATOR", "DRIVER"}
+    role_upper = payload.role.upper()
+    if role_upper not in valid_roles:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid role. Must be one of {valid_roles}"
+        )
+        
+    # Check duplicate
+    existing_user = db.query(User).filter(User.email_or_phone == payload.email_or_phone).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"User with identifier '{payload.email_or_phone}' already exists."
+        )
+        
+    new_user = User(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        full_name=payload.full_name,
+        email_or_phone=payload.email_or_phone,
+        hashed_password=hash_password(payload.password),
+        role=role_upper,
+        is_active=True
+    )
+    
+    # Populate phone_number column if the credential locator matches phone patterns
+    if payload.email_or_phone.startswith("+") or payload.email_or_phone.replace("-", "").isdigit():
+        new_user.phone_number = payload.email_or_phone
+        
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    return {
+        "status": "success",
+        "id": str(new_user.id),
+        "full_name": new_user.full_name,
+        "email_or_phone": new_user.email_or_phone,
+        "role": new_user.role,
+        "is_active": new_user.is_active
+    }

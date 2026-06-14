@@ -14,6 +14,7 @@ from app.models.inventory import Inventory
 from app.models.ingestion import IngestionJob, IngestionStaging
 from app.models.user import User
 from app.models.ledger import CustomerLedger
+from app.utils.security import hash_password
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -193,21 +194,28 @@ def ensure_demo_data(db: Session):
         )
         db.add(invoice)
 
-    # Seed Staff / Users with Driver Role
+    # Seed Staff / Users with different Roles
     user_count = db.query(User).count()
     if user_count == 0:
-        drivers_data = [
-            {"id": uuid.UUID("d1010000-0000-0000-0000-000000000001"), "full_name": "Ramesh Kumar", "phone_number": "+919876543210", "role": "Driver"},
-            {"id": uuid.UUID("d1010000-0000-0000-0000-000000000002"), "full_name": "Suresh Singh", "phone_number": "+919876543211", "role": "Driver"},
-            {"id": uuid.UUID("d1010000-0000-0000-0000-000000000003"), "full_name": "Amit Patel", "phone_number": "+919876543212", "role": "Driver"},
+        hashed_default_pwd = hash_password("Password123")
+        staff_data = [
+            {"id": uuid.UUID("d1010000-0000-0000-0000-000000000001"), "full_name": "Ramesh Kumar", "phone_number": "+919876543210", "email_or_phone": "+919876543210", "role": "DRIVER"},
+            {"id": uuid.UUID("d1010000-0000-0000-0000-000000000002"), "full_name": "Suresh Singh", "phone_number": "+919876543211", "email_or_phone": "+919876543211", "role": "DRIVER"},
+            {"id": uuid.UUID("d1010000-0000-0000-0000-000000000003"), "full_name": "Amit Patel", "phone_number": "+919876543212", "email_or_phone": "+919876543212", "role": "DRIVER"},
+            {"id": uuid.UUID("d1010000-0000-0000-0000-000000000004"), "full_name": "Vikram Malhotra", "phone_number": None, "email_or_phone": "vikram@svdistributors.com", "role": "SUPER_ADMIN"},
+            {"id": uuid.UUID("d1010000-0000-0000-0000-000000000005"), "full_name": "Pooja Sharma", "phone_number": None, "email_or_phone": "pooja@svdistributors.com", "role": "FINANCE"},
+            {"id": uuid.UUID("d1010000-0000-0000-0000-000000000006"), "full_name": "Rahul Varma", "phone_number": None, "email_or_phone": "rahul@svdistributors.com", "role": "OPERATOR"},
         ]
-        for d in drivers_data:
+        for d in staff_data:
             drv = User(
                 id=d["id"],
                 tenant_id=DEMO_TENANT_ID,
                 full_name=d["full_name"],
                 phone_number=d["phone_number"],
-                role=d["role"]
+                email_or_phone=d["email_or_phone"],
+                hashed_password=hashed_default_pwd,
+                role=d["role"],
+                is_active=True
             )
             db.add(drv)
 

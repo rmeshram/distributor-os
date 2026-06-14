@@ -14,7 +14,8 @@ import {
   BarChart3,
   FileText,
   Zap,
-  HelpCircle
+  HelpCircle,
+  Settings
 } from "lucide-react";
 
 interface SidebarProps {
@@ -36,6 +37,7 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
     { name: "Collections", icon: CreditCard, href: "/dashboard/collections" },
     { name: "Sales Analytics", icon: BarChart3, href: "/dashboard/sales-analytics" },
     { name: "Reports", icon: FileText, href: "/dashboard/reports" },
+    { name: "Team Settings", icon: Settings, href: "/dashboard/settings/team" },
     { name: "Automations", icon: Zap }
   ];
 
