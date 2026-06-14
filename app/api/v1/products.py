@@ -1,0 +1,137 @@
+import csv
+import codecs
+import uuid
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status
+from sqlalchemy.orm import Session
+from app.database import get_db, tenant_context
+from app.models.product import Product, ProductAlias
+
+router = APIRouter(prefix="/products", tags=["Products"])
+
+@router.post("/import", status_code=status.HTTP_200_OK)
+def import_products_csv(
+    tenant_id: uuid.UUID = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Ingests a CSV product catalog file, performing transactional database UPSERTs
+    and creating default product aliases for newly inserted items.
+    """
+    # 1. CSV Header Guard rails
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file format. Only CSV files (.csv) are supported."
+        )
+
+    try:
+        # Decode the file stream using UTF-8
+        csv_generator = codecs.iterdecode(file.file, 'utf-8')
+        reader = csv.DictReader(csv_generator)
+
+        # Enforce tenant isolation context
+        tenant_context.set(tenant_id)
+
+        # Validate headers existence
+        required_headers = ["sku_id", "brand", "category", "pack_size", "base_price"]
+        headers = [h.strip() for h in (reader.fieldnames or [])]
+        if not all(field in headers for field in required_headers):
+            missing_fields = [field for field in required_headers if field not in headers]
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"CSV is missing required headers: {', '.join(missing_fields)}"
+            )
+
+        success_count = 0
+        error_rows = []
+
+        # Start a nested savepoint or handle transaction block
+        for idx, row in enumerate(reader, start=2):
+            try:
+                # Sanitize inputs
+                sku_id = (row.get("sku_id") or "").strip()
+                brand = (row.get("brand") or "").strip()
+                category = (row.get("category") or "").strip()
+                pack_size = (row.get("pack_size") or "").strip()
+                base_price_raw = (row.get("base_price") or "").strip()
+
+                if not sku_id or not brand or not category or not pack_size or not base_price_raw:
+                    raise ValueError("All fields (sku_id, brand, category, pack_size, base_price) must be present and non-empty.")
+
+                try:
+                    base_price = float(base_price_raw)
+                except ValueError:
+                    raise ValueError(f"Invalid price value: '{base_price_raw}'. Must be a number.")
+
+                if base_price < 0:
+                    raise ValueError("Base price cannot be negative.")
+
+                # Core transactional lookup logic loop
+                existing_product = db.query(Product).filter(Product.sku_id == sku_id).first()
+                if existing_product:
+                    # Update operation
+                    existing_product.base_price = base_price
+                    existing_product.brand = brand
+                    existing_product.category = category
+                    existing_product.pack_size = pack_size
+                else:
+                    # Insert operation
+                    new_product = Product(
+                        id=uuid.uuid4(),
+                        tenant_id=tenant_id,
+                        sku_id=sku_id,
+                        brand=brand,
+                        category=category,
+                        pack_size=pack_size,
+                        base_price=base_price
+                    )
+                    db.add(new_product)
+                    db.flush()
+
+                    # Concurrently inject default entries into the ProductAlias table
+                    alias_sku = ProductAlias(
+                        id=uuid.uuid4(),
+                        tenant_id=tenant_id,
+                        product_id=new_product.id,
+                        alias_name=sku_id
+                    )
+                    db.add(alias_sku)
+
+                    # Build a friendly brand-category or brand-sku name for alias mapping
+                    friendly_name = f"{brand} {category}"
+                    alias_friendly = ProductAlias(
+                        id=uuid.uuid4(),
+                        tenant_id=tenant_id,
+                        product_id=new_product.id,
+                        alias_name=friendly_name
+                    )
+                    db.add(alias_friendly)
+                    db.flush()
+
+                success_count += 1
+            except Exception as e:
+                error_rows.append(f"Row {idx}: {str(e)}")
+
+        if error_rows:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"message": "Validation errors encountered during import.", "errors": error_rows}
+            )
+
+        db.commit()
+        return {
+            "status": "success",
+            "successful_rows": success_count,
+            "failed_rows": len(error_rows)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ingestion database crash: {str(e)}"
+        )
