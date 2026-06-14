@@ -34,6 +34,8 @@ export default function CustomersPage() {
   const [activeTenantId, setActiveTenantId] = useState("d3b07384-d113-4956-a5d2-64be7357c11d");
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [totalRetailers, setTotalRetailers] = useState(0);
+  const [totalOutstanding, setTotalOutstanding] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,14 +95,18 @@ export default function CustomersPage() {
   };
 
   // Fetch all customers for active tenant
-  const fetchCustomers = useCallback(async () => {
+  const fetchCustomers = useCallback(async (tenantId?: string) => {
+    const targetTenant = (typeof tenantId === "string") ? tenantId : activeTenantId;
+    if (!targetTenant) return;
     setLoading(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/dashboard/customers?tenant_id=${activeTenantId}`);
+      const resp = await fetch(`${apiBase}/api/v1/dashboard/customers?tenant_id=${targetTenant}`);
       if (!resp.ok) throw new Error("Failed to fetch customers");
       const data = await resp.json();
       setCustomers(data);
+      setTotalRetailers(data.length);
+      setTotalOutstanding(data.reduce((sum: number, c: any) => sum + c.outstanding_balance, 0));
       setError(null);
     } catch (err: any) {
       console.error("Customers load failed:", err);
@@ -111,7 +117,17 @@ export default function CustomersPage() {
   }, [activeTenantId]);
 
   useEffect(() => {
-    fetchCustomers();
+    // 1. Immediately wipe out old data rows so they can never leak or persist
+    setCustomers([]); 
+    
+    // 2. Clear out any summary metric banners (Total Retailers, Outstanding Balances)
+    setTotalRetailers(0);
+    setTotalOutstanding(0);
+
+    // 3. Initiate the secure network request for the new active tenant context
+    if (activeTenantId) {
+      fetchCustomers(activeTenantId);
+    }
   }, [activeTenantId, fetchCustomers]);
 
   // Open Edit Modal
@@ -227,8 +243,7 @@ export default function CustomersPage() {
   });
 
   // Derived Metrics
-  const totalCustomersCount = customers.length;
-  const totalOutstanding = customers.reduce((sum, c) => sum + c.outstanding_balance, 0);
+  const totalCustomersCount = totalRetailers;
   const atRiskCount = customers.filter(c => {
     if (c.credit_limit <= 0) return false;
     return c.outstanding_balance / c.credit_limit >= 0.9;
