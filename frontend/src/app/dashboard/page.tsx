@@ -29,12 +29,15 @@ export default function DashboardPage() {
         }
 
         const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const token = localStorage.getItem("accessToken");
+
         const resp = await fetch(`${apiBase}/api/v1/auth/me`, {
           method: "GET",
-          credentials: "include", // CRITICAL: Forces browser to carry secure HttpOnly access cookies
+          credentials: "include", // Retain HttpOnly channel compatibility
           headers: {
             "Accept": "application/json",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            ...(token ? { "Authorization": `Bearer ${token}` } : {}) // CRITICAL: Standard Bearer token authentication fallback
           }
         });
 
