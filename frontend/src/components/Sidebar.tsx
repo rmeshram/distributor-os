@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -14,13 +14,8 @@ import {
   BarChart3,
   FileText,
   Zap,
-  HelpCircle,
-  Settings,
-  MessageSquare,
   ChevronLeft,
-  ChevronRight,
-  Globe,
-  LogOut
+  ChevronRight
 } from "lucide-react";
 
 interface SidebarProps {
@@ -31,34 +26,7 @@ interface SidebarProps {
 
 export default function Sidebar({ activeTab, setActiveTab, tenantName }: SidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
-
-  const handleLogout = async () => {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-    const token = localStorage.getItem("accessToken");
-
-    try {
-      // Notify backend server to discard cross-site session cookies
-      await fetch(`${apiBase}/api/v1/auth/logout`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Accept": "application/json",
-          "Content-Type": "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        }
-      });
-    } catch (err) {
-      console.error("Server-side session teardown log incomplete:", err);
-    }
-
-    // Explicitly purge all local caching keys from client storage
-    localStorage.clear();
-    
-    // Clear cookie fallback via explicit window location assignment
-    window.location.href = "/auth";
-  };
 
   // Sync with localStorage and body classes on load
   useEffect(() => {
@@ -161,7 +129,7 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
         })}
       </nav>
 
-      {/* Profile & Help Area */}
+      {/* Profile Area */}
       <div className={`p-4 border-t border-brand-darkHover bg-brand-dark relative flex flex-col ${isCollapsed ? 'items-center gap-4' : 'gap-3'}`}>
         {/* Toggle Collapse Button */}
         <button
@@ -174,72 +142,6 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
           {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
         </button>
 
-        {/* Help Link */}
-        {isCollapsed ? (
-          <div className="group relative w-full flex justify-center">
-            <button className="p-2 text-brand-textMuted hover:bg-brand-darkHover hover:text-white rounded-lg transition-all">
-              <HelpCircle className="w-5 h-5" />
-            </button>
-            <span className="absolute left-full ml-3 px-2 py-1 bg-slate-950 text-white text-xs rounded-md whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none z-50 invisible group-hover:visible">
-              Need Help?
-            </span>
-          </div>
-        ) : (
-          <button className="w-full flex items-center gap-3 p-3 rounded-lg text-brand-textMuted hover:bg-brand-darkHover hover:text-white text-sm transition-all">
-            <HelpCircle className="w-5 h-5 flex-shrink-0" />
-            <div className="text-left">
-              <p className="font-semibold text-xs text-white">Need help?</p>
-              <p className="text-[10px]">Contact Support</p>
-            </div>
-          </button>
-        )}
-
-        {/* View Marketing Site */}
-        {isCollapsed ? (
-          <div className="group relative w-full flex justify-center">
-            <Link href="/" className="p-2 text-brand-textMuted hover:bg-brand-darkHover hover:text-white rounded-lg transition-all">
-              <Globe className="w-5 h-5" />
-            </Link>
-            <span className="absolute left-full ml-3 px-2 py-1 bg-slate-950 text-white text-xs rounded-md whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none z-50 invisible group-hover:visible">
-              View Marketing Site
-            </span>
-          </div>
-        ) : (
-          <Link href="/" className="w-full flex items-center gap-3 p-3 rounded-lg text-brand-textMuted hover:bg-brand-darkHover hover:text-white text-sm transition-all">
-            <Globe className="w-5 h-5 flex-shrink-0" />
-            <div className="text-left">
-              <p className="font-semibold text-xs text-white">View Marketing Site</p>
-              <p className="text-[10px]">Back to homepage</p>
-            </div>
-          </Link>
-        )}
-
-        {/* Logout Button */}
-        {isCollapsed ? (
-          <div className="group relative w-full flex justify-center">
-            <button
-              onClick={handleLogout}
-              className="p-2 text-brand-textMuted hover:bg-brand-darkHover hover:text-white rounded-lg transition-all cursor-pointer"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
-            <span className="absolute left-full ml-3 px-2 py-1 bg-slate-950 text-white text-xs rounded-md whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none z-50 invisible group-hover:visible">
-              Log Out
-            </span>
-          </div>
-        ) : (
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 p-3 rounded-lg text-brand-textMuted hover:bg-brand-darkHover hover:text-white text-sm transition-all cursor-pointer"
-          >
-            <LogOut className="w-5 h-5 flex-shrink-0" />
-            <div className="text-left">
-              <p className="font-semibold text-xs text-white">Log Out</p>
-              <p className="text-[10px]">End your session</p>
-            </div>
-          </button>
-        )}
-
         {/* Tenant Profile */}
         <div className={`flex items-center ${isCollapsed ? 'justify-center p-0 bg-transparent' : 'gap-3 p-2 bg-brand-darkHover rounded-lg'} overflow-hidden transition-all duration-300 w-full`}>
           <div className="w-10 h-10 rounded-full bg-brand-blue flex items-center justify-center font-bold text-white shadow-inner flex-shrink-0">
@@ -248,7 +150,6 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
           {!isCollapsed && (
             <div className="text-left overflow-hidden transition-opacity duration-200">
               <h4 className="font-semibold text-sm truncate text-white">{tenantName}</h4>
-              <p className="text-xs text-brand-textMuted truncate">Primary Admin</p>
             </div>
           )}
         </div>
