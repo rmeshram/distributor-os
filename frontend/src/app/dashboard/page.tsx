@@ -100,6 +100,15 @@ export default function DashboardPage() {
     error
   } = useDashboardData(isHydrating ? "" : tenantId, startDate, endDate);
 
+  // Absolute multi-tenant protection guard
+  if (!tenantId || tenantId === "") {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
       {/* 1. Left Sidebar */}
