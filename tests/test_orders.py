@@ -610,6 +610,7 @@ def test_get_order_by_id_with_allocations(db_session, client):
     assert len(data["payments_allocated"]) == 1
     assert data["payments_allocated"][0]["payment_code"] == f"PAY-REC-{str(pay.id)[:8].upper()}"
     assert data["payments_allocated"][0]["amount_allocated"] == 500.0
+    assert data["payments_allocated"][0]["total_voucher_amount"] == 500.0
     assert data["payments_allocated"][0]["method"] == "UPI"
     assert data["payments_allocated"][0]["reference_number"] == "TXN1234567890"
 

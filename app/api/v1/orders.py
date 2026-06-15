@@ -546,6 +546,7 @@ def get_order_by_id(
             payments_allocated.append({
                 "payment_code": f"PAY-REC-{str(payment.id)[:8].upper()}",
                 "amount_allocated": float(link.amount_allocated),
+                "total_voucher_amount": float(payment.amount),
                 "method": payment.method,
                 "reference_number": payment.reference_number,
                 "created_at": payment.created_at.isoformat()

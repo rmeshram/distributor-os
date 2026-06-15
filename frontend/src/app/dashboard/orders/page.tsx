@@ -63,6 +63,7 @@ export default function OrdersPage() {
     payments_allocated: {
       payment_code: string;
       amount_allocated: number;
+      total_voucher_amount: number;
       method: string;
       reference_number: string | null;
       created_at: string;
@@ -621,16 +622,21 @@ export default function OrdersPage() {
                                 <span className="text-xs font-bold font-mono text-slate-600">
                                   {payment.payment_code}
                                 </span>
-                                <span className="text-sm font-extrabold text-emerald-700">
-                                  {formatCurrency(payment.amount_allocated)}
-                                </span>
                               </div>
-                              <div className="flex items-center justify-between text-xs text-slate-600 mt-0.5">
+                              <div className="flex items-center justify-between text-xs text-slate-600 mt-1">
+                                <span>Total Voucher Amount:</span>
+                                <span className="font-semibold text-slate-700">₹{payment.total_voucher_amount.toLocaleString()}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-xs text-slate-600 mt-1">
+                                <span>Amount Applied to this Order:</span>
+                                <span className="font-extrabold text-emerald-700">{formatCurrency(payment.amount_allocated)}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-xs text-slate-600 mt-1">
                                 <span>Method: <strong className="font-semibold text-slate-700">{payment.method}</strong></span>
                                 <span>{new Date(payment.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
                               </div>
                               {payment.reference_number && (
-                                <div className="text-xs text-slate-600 mt-0.5 font-mono truncate">
+                                <div className="text-xs text-slate-600 mt-1 font-mono truncate">
                                   Ref: {payment.reference_number}
                                 </div>
                               )}
