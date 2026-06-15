@@ -346,8 +346,12 @@ export default function ShipmentsPage() {
                   </h3>
                   <div className="flex-1 overflow-y-auto border border-slate-100 rounded-lg">
                     {pendingOrders.length === 0 ? (
-                      <div className="flex items-center justify-center h-full text-slate-400 text-xs font-semibold">
-                        No orders waiting dispatch allocations.
+                      <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/30 text-center m-4">
+                        <div className="p-3 bg-slate-100 text-slate-400 rounded-full mb-3">
+                          <Truck className="w-6 h-6" />
+                        </div>
+                        <h3 className="text-sm font-semibold text-slate-800">No records found</h3>
+                        <p className="text-xs text-slate-500 max-w-xs mt-1">There are currently no active logs registered under this pipeline category.</p>
                       </div>
                     ) : (
                       <table className="w-full text-left text-xs border-collapse">
@@ -457,8 +461,12 @@ export default function ShipmentsPage() {
 
                 <div className="overflow-x-auto">
                   {activeShipments.length === 0 ? (
-                    <div className="flex items-center justify-center py-20 text-slate-400 text-xs font-semibold">
-                      No active shipments registered.
+                    <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/30 text-center m-6">
+                      <div className="p-3 bg-slate-100 text-slate-400 rounded-full mb-3">
+                        <Truck className="w-6 h-6" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-slate-800">No records found</h3>
+                      <p className="text-xs text-slate-500 max-w-xs mt-1">There are currently no active logs registered under this pipeline category.</p>
                     </div>
                   ) : (
                     <table className="w-full text-left text-xs border-collapse">

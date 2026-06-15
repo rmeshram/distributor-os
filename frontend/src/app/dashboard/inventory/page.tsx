@@ -356,9 +356,12 @@ export default function InventoryPage() {
 
                 </div>
               ) : filteredInventory.length === 0 ? (
-                <div className="text-center text-slate-400 py-24">
-                  <p className="text-sm font-medium">No items match search filter criteria.</p>
-                  <p className="text-xs text-slate-400 mt-1">Try refining search parameters or sync catalog.</p>
+                <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/30 text-center m-6">
+                  <div className="p-3 bg-slate-100 text-slate-400 rounded-full mb-3">
+                    <Box className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-slate-800">No records found</h3>
+                  <p className="text-xs text-slate-500 max-w-xs mt-1">There are currently no active logs registered under this pipeline category.</p>
                 </div>
               ) : (
                 <table className="w-full text-left text-sm border-collapse">

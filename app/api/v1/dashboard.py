@@ -482,27 +482,6 @@ def get_dashboard_metrics(
         if has_overdue:
             overdue_60_count += 1
 
-    # If active tenant matches our demo tenant and no date filter is present,
-    # return exact visual metrics from the design specification.
-    if tenant_id == DEMO_TENANT_ID and not has_date_filter:
-        return {
-            "total_sales": 2845600,
-            "total_sales_change": 18.6,
-            "orders_count": 1482,
-            "orders_count_change": 12.4,
-            "average_order_value": 19210,
-            "average_order_value_change": 6.7,
-            "outstanding_collections": 2137200,
-            "outstanding_collections_change": -9.8,
-            "low_stock_count": low_stock_count,
-            "out_of_stock_count": out_of_stock_count,
-            "total_skus_count": total_skus_count,
-            "inventory_value": inventory_value_str,
-            "overdue_60_count": overdue_60_count,
-            "total_skus": total_skus_count,
-            "total_inventory_value": float(inventory_val_sum)
-        }
-
     return {
         "total_sales": float(total_sales),
         "total_sales_change": float(total_sales_change),
