@@ -36,6 +36,15 @@ export default function DashboardPage() {
             "Content-Type": "application/json",
           }
         });
+
+        // CRITICAL: Redirect to auth on 401 (expired/missing cookie)
+        if (resp.status === 401) {
+          localStorage.removeItem("tenant_id");
+          localStorage.removeItem("tenant_name");
+          window.location.href = "/auth";
+          return;
+        }
+
         if (resp.ok) {
           const profileData = await resp.json();
           setUserProfile(profileData);
@@ -50,7 +59,10 @@ export default function DashboardPage() {
           }
         }
       } catch (err) {
+        // Network failure (backend unreachable) — redirect to auth
         console.error("Failed to load authenticated user profile:", err);
+        window.location.href = "/auth";
+        return;
       } finally {
         setIsHydrating(false);
       }

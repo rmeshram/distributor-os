@@ -34,6 +34,15 @@ export default function DashboardHeader({
             "Content-Type": "application/json",
           }
         });
+
+        // Redirect to auth on 401 (expired/missing cookie)
+        if (resp.status === 401) {
+          localStorage.removeItem("tenant_id");
+          localStorage.removeItem("tenant_name");
+          window.location.href = "/auth";
+          return;
+        }
+
         if (resp.ok) {
           const data = await resp.json();
           setInternalProfile(data);
@@ -42,7 +51,10 @@ export default function DashboardHeader({
           }
         }
       } catch (err) {
+        // Network failure — redirect to auth
         console.error("DashboardHeader failed to load profile:", err);
+        window.location.href = "/auth";
+        return;
       }
     };
     fetchProfile();

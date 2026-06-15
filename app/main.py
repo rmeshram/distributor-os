@@ -38,20 +38,22 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Build CORS allowed origins from environment variable
-# On Render, set ALLOWED_ORIGINS to the production frontend URL (comma-separated for multiple)
-# e.g. ALLOWED_ORIGINS=https://distributor-os-frontend.onrender.com
-_default_origins = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000"
-ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get("ALLOWED_ORIGINS", _default_origins).split(",")
-    if origin.strip()
+# Robust CORS origin list — hardcode production frontend + local dev defaults
+# Override at runtime via ALLOWED_ORIGINS env var (comma-separated)
+allowed_origins = [
+    "https://distributor-os-ui.onrender.com",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
+env_origins = os.getenv("ALLOWED_ORIGINS")
+if env_origins:
+    # Split by comma, strip whitespace, filter empty strings safely
+    allowed_origins = [orig.strip() for orig in env_origins.split(",") if orig.strip()]
 
 # Enforce explicit CORS origins so credentials (HttpOnly cookies) transmit correctly
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
