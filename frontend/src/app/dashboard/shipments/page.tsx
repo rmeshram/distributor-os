@@ -264,9 +264,12 @@ export default function ShipmentsPage() {
 
   // Derived metrics
   const pendingAllocationCount = pendingOrders.length;
-  const activeDispatchedRunsCount = new Set(
-    activeShipments.filter(s => s.status !== "Delivered").map(s => s.vehicle_number)
-  ).size;
+  const shipments = activeShipments;
+  const hasNoShipments = !shipments || shipments.length === 0;
+  const activeVehicles = shipments
+    ? shipments.filter(s => s.status !== "Delivered").map(s => s.vehicle_number)
+    : [];
+  const activeDispatchedRunsCount = new Set(activeVehicles).size;
 
   return (
     <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
@@ -462,7 +465,7 @@ export default function ShipmentsPage() {
                   </h3>
                 </div>
 
-                {activeShipments.length === 0 ? (
+                {hasNoShipments ? (
                   <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/40 text-center my-4 mx-6">
                     <div className="p-3 bg-slate-100 text-slate-400 rounded-full mb-3">
                       <Truck className="w-6 h-6" />
@@ -486,7 +489,7 @@ export default function ShipmentsPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                        {activeShipments.map(s => (
+                        {shipments.map(s => (
                           <tr key={s.shipment_id} className="hover:bg-slate-50/50 transition-colors">
                             <td className="py-4 px-6">
                               <span className="font-bold text-slate-800">{s.shipment_id.slice(0, 8).toUpperCase()}...</span>
@@ -545,7 +548,6 @@ export default function ShipmentsPage() {
                     </table>
                   </div>
                 )}
-                </div>
               </div>
             </div>
           )}
