@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Search, Bell, MessageSquare, Calendar, ChevronDown } from "lucide-react";
 
@@ -17,6 +17,36 @@ export default function DashboardHeader({
   tenantName,
   userProfile
 }: DashboardHeaderProps) {
+  const [internalProfile, setInternalProfile] = useState<any>(null);
+
+  useEffect(() => {
+    if (userProfile) {
+      setInternalProfile(userProfile);
+      return;
+    }
+    const fetchProfile = async () => {
+      try {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const resp = await fetch(`${apiBase}/api/v1/auth/me`, {
+          method: "GET",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          }
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          setInternalProfile(data);
+        }
+      } catch (err) {
+        console.error("DashboardHeader failed to load profile:", err);
+      }
+    };
+    fetchProfile();
+  }, [userProfile]);
+
+  const displayProfile = userProfile || internalProfile;
+
   // Available tenants for testing multi-tenant isolation
   const baseTenants = [
     { id: "d3b07384-d113-4956-a5d2-64be7357c11d", name: "S.V. Distributors" },
@@ -26,12 +56,13 @@ export default function DashboardHeader({
 
   // Append user's custom tenant dynamically if not present in the default list
   const tenants = [...baseTenants];
-  if (userProfile?.tenant?.id) {
-    const exists = tenants.some(t => t.id === userProfile.tenant.id);
+  const activeUserTenant = displayProfile?.tenant;
+  if (activeUserTenant?.id) {
+    const exists = tenants.some(t => t.id === activeUserTenant.id);
     if (!exists) {
       tenants.push({
-        id: userProfile.tenant.id,
-        name: userProfile.tenant.name || "My Workspace"
+        id: activeUserTenant.id,
+        name: activeUserTenant.name || "My Workspace"
       });
     }
   }
@@ -106,11 +137,15 @@ export default function DashboardHeader({
         {/* User Profile */}
         <div className="flex items-center gap-3 pl-2 border-l border-dashboard-border">
           <div className="text-right">
-            <h5 className="font-semibold text-sm text-slate-800">Hi, {userProfile?.full_name || "Vikram"}</h5>
-            <p className="text-[10px] text-slate-400 font-medium">{userProfile?.role || "Super Admin"}</p>
+            <h5 className="font-semibold text-sm text-slate-800">
+              {displayProfile?.full_name ? `Hi, ${displayProfile.full_name}` : ""}
+            </h5>
+            <p className="text-[10px] text-slate-400 font-medium">
+              {displayProfile?.role || ""}
+            </p>
           </div>
           <div className="w-9 h-9 rounded-full bg-slate-200 overflow-hidden border border-slate-300 shadow-sm flex items-center justify-center text-xs font-bold text-slate-700">
-            {userProfile?.full_name ? userProfile.full_name.charAt(0).toUpperCase() : "V"}
+            {displayProfile?.full_name ? displayProfile.full_name.charAt(0).toUpperCase() : ""}
           </div>
         </div>
       </div>

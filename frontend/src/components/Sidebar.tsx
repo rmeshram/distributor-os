@@ -189,7 +189,7 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
         {/* Tenant Profile */}
         <div className={`flex items-center ${isCollapsed ? 'justify-center p-0 bg-transparent' : 'gap-3 p-2 bg-brand-darkHover rounded-lg'} overflow-hidden transition-all duration-300 w-full`}>
           <div className="w-10 h-10 rounded-full bg-brand-blue flex items-center justify-center font-bold text-white shadow-inner flex-shrink-0">
-            {tenantName ? tenantName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : "SV"}
+            {tenantName ? tenantName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : ""}
           </div>
           {!isCollapsed && (
             <div className="text-left overflow-hidden transition-opacity duration-200">

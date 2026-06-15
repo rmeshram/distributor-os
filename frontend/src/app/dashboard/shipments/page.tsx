@@ -96,20 +96,19 @@ export default function ShipmentsPage() {
       case "f2d095a6-e335-5b78-c7f4-86df9579e33f":
         return "Vikas Sales Corp";
       default:
-        return "S.V. Distributors";
+        return "My Workspace";
     }
   };
 
   // Fetch pending orders & active runs
-  const fetchShipmentData = useCallback(async (tenantId?: string) => {
-    const targetTenant = tenantId || activeTenantId;
+  const fetchShipmentData = useCallback(async () => {
     setLoading(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       
       const [pendingResp, activeResp] = await Promise.all([
-        fetch(`${apiBase}/api/v1/shipments/pending?tenant_id=${targetTenant}`),
-        fetch(`${apiBase}/api/v1/shipments/active?tenant_id=${targetTenant}`)
+        fetch(`${apiBase}/api/v1/shipments/pending`, { credentials: "include" }),
+        fetch(`${apiBase}/api/v1/shipments/active`, { credentials: "include" })
       ]);
 
       if (!pendingResp.ok || !activeResp.ok) {
@@ -128,12 +127,12 @@ export default function ShipmentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeTenantId]);
+  }, []);
 
   const fetchDrivers = useCallback(async (tenantId: string) => {
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/users?role=Driver&tenant_id=${tenantId}`);
+      const resp = await fetch(`${apiBase}/api/v1/users?role=Driver&tenant_id=${tenantId}`, { credentials: "include" });
       if (resp.ok) {
         const data = await resp.json();
         setDrivers(data);
@@ -149,18 +148,18 @@ export default function ShipmentsPage() {
   }, []);
 
   useEffect(() => {
+    fetchShipmentData();
     if (activeTenantId) {
-      fetchShipmentData(activeTenantId);
       fetchDrivers(activeTenantId);
-      setSelectedOrderIds([]);
     }
+    setSelectedOrderIds([]);
   }, [activeTenantId, fetchShipmentData, fetchDrivers]);
 
   // Tab focus revalidation and background sync to resolve cache lag
   useEffect(() => {
     const handleFocus = () => {
+      fetchShipmentData();
       if (activeTenantId) {
-        fetchShipmentData(activeTenantId);
         fetchDrivers(activeTenantId);
       }
     };
@@ -190,8 +189,9 @@ export default function ShipmentsPage() {
     setSavingRun(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/shipments?tenant_id=${activeTenantId}`, {
+      const resp = await fetch(`${apiBase}/api/v1/shipments`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           driver_id: selectedDriverId,
@@ -205,7 +205,7 @@ export default function ShipmentsPage() {
         showToast(`Delivery Run created with ${selectedOrderIds.length} orders dispatched!`, "success");
         setVehicleNumber("");
         setSelectedOrderIds([]);
-        fetchShipmentData(activeTenantId);
+        fetchShipmentData();
       } else {
         showToast(resData.detail || "Failed to dispatch run.", "error");
       }
@@ -225,6 +225,7 @@ export default function ShipmentsPage() {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       const resp = await fetch(`${apiBase}/api/v1/shipments/${shipmentId}/status`, {
         method: "PATCH",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: "Delivered",
@@ -235,7 +236,7 @@ export default function ShipmentsPage() {
       const resData = await resp.json();
       if (resp.ok) {
         showToast("Shipment marked as Delivered successfully!", "success");
-        fetchShipmentData(activeTenantId);
+        fetchShipmentData();
       } else {
         showToast(resData.detail || "Failed to mark delivered.", "error");
       }
@@ -461,18 +462,18 @@ export default function ShipmentsPage() {
                   </h3>
                 </div>
 
-                <div className="overflow-x-auto">
-                  {activeShipments.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/40 text-center my-4">
-                      <div className="p-3 bg-slate-100 text-slate-400 rounded-full mb-3">
-                        <Truck className="w-6 h-6" />
-                      </div>
-                      <h3 className="text-sm font-semibold text-slate-800">Your workspace is clean</h3>
-                      <p className="text-xs text-slate-500 max-w-xs mt-1">
-                        Connect your warehouse stock or send your first WhatsApp text order to see live tracking metrics update instantly.
-                      </p>
+                {activeShipments.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/40 text-center my-4 mx-6">
+                    <div className="p-3 bg-slate-100 text-slate-400 rounded-full mb-3">
+                      <Truck className="w-6 h-6" />
                     </div>
-                  ) : (
+                    <h3 className="text-sm font-semibold text-slate-800">Your workspace is clean</h3>
+                    <p className="text-xs text-slate-500 max-w-xs mt-1">
+                      Connect your warehouse stock or send your first WhatsApp text order to see live tracking metrics update instantly.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
                         <tr className="text-slate-400 font-bold border-b border-dashboard-border bg-slate-50/50">
@@ -542,7 +543,8 @@ export default function ShipmentsPage() {
                         ))}
                       </tbody>
                     </table>
-                  )}
+                  </div>
+                )}
                 </div>
               </div>
             </div>

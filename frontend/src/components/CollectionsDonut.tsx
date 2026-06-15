@@ -24,6 +24,9 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
     return `₹ ${lakhs.toFixed(2)}L`;
   };
 
+  const hasData = totalOutstanding > 0;
+  const chartData = hasData ? data : [{ name: "No Outstanding", value: 1 }];
+
   return (
     <div className="bg-white p-4 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between h-full">
       {/* Header */}
@@ -54,16 +57,16 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
-                data={data}
+                data={chartData}
                 cx="50%"
                 cy="50%"
                 innerRadius={48}
                 outerRadius={66}
-                paddingAngle={3}
+                paddingAngle={hasData ? 3 : 0}
                 dataKey="value"
               >
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                {chartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={hasData ? COLORS[index % COLORS.length] : "#e2e8f0"} />
                 ))}
               </Pie>
             </PieChart>
