@@ -209,7 +209,7 @@ export default function DashboardPage() {
               <LiveDeliveries />
             </div>
             <div className="min-h-[300px]">
-              <InventorySummary />
+              <InventorySummary data={metrics || undefined} />
             </div>
             <div className="min-h-[300px]">
               <ActivityFeed activities={activities} />

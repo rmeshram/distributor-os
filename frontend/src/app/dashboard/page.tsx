@@ -183,12 +183,7 @@ export default function DashboardPage() {
               <LiveDeliveries viewAllHref="/dashboard/shipments" />
             </div>
             <div className="min-h-[300px]">
-              <InventorySummary
-                totalSkus={metrics?.total_skus}
-                lowStock={metrics?.low_stock_count}
-                outOfStock={metrics?.out_of_stock_count}
-                inventoryValue={metrics?.inventory_value}
-              />
+              <InventorySummary data={metrics || undefined} />
             </div>
             <div className="min-h-[300px]">
               <ActivityFeed activities={activities} viewAllHref="/dashboard/reports" />

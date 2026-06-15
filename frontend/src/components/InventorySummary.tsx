@@ -1,29 +1,19 @@
 "use client";
 
 import React from "react";
-import { AlertCircle, Layers, CheckCircle2, DollarSign, ArrowRight } from "lucide-react";
+import { AlertCircle, Layers, DollarSign, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
 interface InventorySummaryProps {
-  totalSkus?: number;
-  lowStock?: number;
-  outOfStock?: number;
-  inventoryValue?: string;
+  data?: {
+    total_skus?: number;
+    low_stock_count?: number;
+    out_of_stock_count?: number;
+    total_inventory_value?: number;
+  };
 }
 
-export default function InventorySummary({
-  totalSkus = 4285,
-  lowStock = 128,
-  outOfStock = 27,
-  inventoryValue = "₹ 8.52 Cr"
-}: InventorySummaryProps) {
-  const summaryItems = [
-    { label: "Total SKUs", value: totalSkus.toLocaleString(), color: "bg-blue-500", icon: Layers, iconColor: "text-blue-500 bg-blue-50" },
-    { label: "Low Stock Items", value: lowStock.toLocaleString(), color: "bg-amber-500", icon: AlertCircle, iconColor: "text-amber-500 bg-amber-50" },
-    { label: "Out of Stock Items", value: outOfStock.toLocaleString(), color: "bg-rose-500", icon: AlertCircle, iconColor: "text-rose-500 bg-rose-50" },
-    { label: "Inventory Value", value: inventoryValue, color: "bg-emerald-500", icon: DollarSign, iconColor: "text-emerald-500 bg-emerald-50" }
-  ];
-
+export default function InventorySummary({ data }: InventorySummaryProps) {
   return (
     <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between h-full">
       {/* Header */}
@@ -37,45 +27,82 @@ export default function InventorySummary({
 
       {/* Summary List with Data Bars */}
       <div className="flex-1 space-y-4 py-2">
-        {summaryItems.map((item, idx) => {
-          const Icon = item.icon;
-          return (
-            <div key={idx} className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${item.iconColor}`}>
-                  <Icon className="w-4.5 h-4.5" />
-                </div>
-                <span className="text-sm font-semibold text-slate-600">{item.label}</span>
-              </div>
-              
-              <div className="flex items-center gap-3 text-right">
-                <span className="text-sm font-bold text-slate-800">{item.value}</span>
-                {/* Visual indicator bar */}
-                <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden hidden sm:block">
-                  <div
-                    className={`h-full rounded-full ${item.color}`}
-                    style={{
-                      width: item.label.includes("Total")
-                        ? "90%"
-                        : item.label.includes("Low")
-                        ? "35%"
-                        : item.label.includes("Out")
-                        ? "10%"
-                        : "70%"
-                    }}
-                  />
-                </div>
-              </div>
+        {/* Total SKUs */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-blue-500 bg-blue-50">
+              <Layers className="w-4.5 h-4.5" />
             </div>
-          );
-        })}
+            <span className="text-sm font-semibold text-slate-600">Total SKUs</span>
+          </div>
+          
+          <div className="flex items-center gap-3 text-right">
+            <span className="text-sm font-bold text-slate-800">{data?.total_skus ?? 0}</span>
+            <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden hidden sm:block">
+              <div className="h-full rounded-full bg-blue-500" style={{ width: "90%" }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Low Stock Items */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-amber-500 bg-amber-50">
+              <AlertCircle className="w-4.5 h-4.5" />
+            </div>
+            <span className="text-sm font-semibold text-slate-600">Low Stock Items</span>
+          </div>
+          
+          <div className="flex items-center gap-3 text-right">
+            <span className="text-sm font-bold text-slate-800">{data?.low_stock_count ?? 0}</span>
+            <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden hidden sm:block">
+              <div className="h-full rounded-full bg-amber-500" style={{ width: "35%" }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Out of Stock Items */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-rose-500 bg-rose-50">
+              <AlertCircle className="w-4.5 h-4.5" />
+            </div>
+            <span className="text-sm font-semibold text-slate-600">Out of Stock Items</span>
+          </div>
+          
+          <div className="flex items-center gap-3 text-right">
+            <span className="text-sm font-bold text-slate-800">{data?.out_of_stock_count ?? 0}</span>
+            <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden hidden sm:block">
+              <div className="h-full rounded-full bg-rose-500" style={{ width: "10%" }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Inventory Value */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-emerald-500 bg-emerald-50">
+              <DollarSign className="w-4.5 h-4.5" />
+            </div>
+            <span className="text-sm font-semibold text-slate-600">Inventory Value</span>
+          </div>
+          
+          <div className="flex items-center gap-3 text-right">
+            <span className="text-sm font-bold text-slate-800">
+              ₹{((data?.total_inventory_value ?? 0) / 100000).toFixed(2)}L
+            </span>
+            <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden hidden sm:block">
+              <div className="h-full rounded-full bg-emerald-500" style={{ width: "70%" }} />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Warning notice */}
-      {lowStock > 0 && (
+      {data?.low_stock_count !== undefined && data.low_stock_count > 0 && (
         <div className="mt-4 p-3 bg-amber-50/70 border border-amber-200 rounded-xl flex items-center gap-2.5 text-xs text-amber-800">
           <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-          <span className="font-semibold">{lowStock} SKUs are below minimum stock level</span>
+          <span>{data.low_stock_count} SKUs are below minimum stock level</span>
         </div>
       )}
     </div>

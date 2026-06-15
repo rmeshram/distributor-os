@@ -498,7 +498,9 @@ def get_dashboard_metrics(
             "out_of_stock_count": out_of_stock_count,
             "total_skus_count": total_skus_count,
             "inventory_value": inventory_value_str,
-            "overdue_60_count": overdue_60_count
+            "overdue_60_count": overdue_60_count,
+            "total_skus": total_skus_count,
+            "total_inventory_value": float(inventory_val_sum)
         }
 
     return {
@@ -514,7 +516,9 @@ def get_dashboard_metrics(
         "out_of_stock_count": out_of_stock_count,
         "total_skus_count": total_skus_count,
         "inventory_value": inventory_value_str,
-        "overdue_60_count": overdue_60_count
+        "overdue_60_count": overdue_60_count,
+        "total_skus": total_skus_count,
+        "total_inventory_value": float(inventory_val_sum)
     }
 
 
