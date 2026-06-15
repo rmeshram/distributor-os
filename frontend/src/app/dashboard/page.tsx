@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import MetricCards from "@/components/MetricCards";
@@ -16,6 +16,19 @@ import WhatsAppSimulator from "@/components/WhatsAppSimulator";
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("Dashboard");
   const [activeTenantId, setActiveTenantId] = useState("d3b07384-d113-4956-a5d2-64be7357c11d");
+
+  // Sync tenant from localStorage on load
+  useEffect(() => {
+    const stored = localStorage.getItem("activeTenantId");
+    if (stored) {
+      setActiveTenantId(stored);
+    }
+  }, []);
+
+  const handleTenantChange = (id: string) => {
+    setActiveTenantId(id);
+    localStorage.setItem("activeTenantId", id);
+  };
   const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
     show: false,
     message: "",
@@ -73,7 +86,7 @@ export default function DashboardPage() {
         {/* 2. Top Header */}
         <DashboardHeader
           activeTenantId={activeTenantId}
-          setActiveTenantId={setActiveTenantId}
+          setActiveTenantId={handleTenantChange}
           tenantName={getTenantName()}
         />
 

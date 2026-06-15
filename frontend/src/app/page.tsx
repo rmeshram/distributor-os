@@ -1,253 +1,247 @@
 "use client";
 
-import React, { useState } from "react";
-import Sidebar from "@/components/Sidebar";
-import DashboardHeader from "@/components/DashboardHeader";
-import MetricCards from "@/components/MetricCards";
-import RecentOrders from "@/components/RecentOrders";
-import CollectionsDonut from "@/components/CollectionsDonut";
-import LiveDeliveries from "@/components/LiveDeliveries";
-import InventorySummary from "@/components/InventorySummary";
-import ActivityFeed from "@/components/ActivityFeed";
-import { useDashboardData } from "@/hooks/useDashboardData";
-import { ChevronDown, SlidersHorizontal, RefreshCw, CheckCircle2, AlertCircle, X } from "lucide-react";
-import WhatsAppSimulator from "@/components/WhatsAppSimulator";
+import React from "react";
+import Link from "next/link";
+import { MessageSquare, Map, Database, ArrowRight, Check, Sparkles, Truck, Box } from "lucide-react";
 
-export default function DashboardPage() {
-  const [activeTab, setActiveTab] = useState("Dashboard");
-  const [activeTenantId, setActiveTenantId] = useState("d3b07384-d113-4956-a5d2-64be7357c11d");
-  const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
-    show: false,
-    message: "",
-    type: "success"
-  });
-
-  const showToast = (message: string, type: "success" | "error") => {
-    setToast({ show: true, message, type });
-    setTimeout(() => {
-      setToast(prev => ({ ...prev, show: false }));
-    }, 4000);
-  };
-
-  // Get active tenant name
-  const getTenantName = () => {
-    switch (activeTenantId) {
-      case "d3b07384-d113-4956-a5d2-64be7357c11d":
-        return "S.V. Distributors";
-      case "e1c08495-d224-4a67-b6e3-75cf8468d22e":
-        return "Reliance Distribution";
-      case "f2d095a6-e335-5b78-c7f4-86df9579e33f":
-        return "Vikas Sales Corp";
-      default:
-        return "S.V. Distributors";
-    }
-  };
-
-  const {
-    metrics,
-    recentOrders,
-    donutData,
-    activities,
-    selectedOrderDetails,
-    loadingDetails,
-    fetchOrderDetails,
-    closeDetails,
-    refreshAll,
-    error
-  } = useDashboardData(activeTenantId);
-
+export default function MarketingPage() {
   return (
-    <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
-      {/* 1. Left Sidebar */}
-      <Sidebar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        tenantName={getTenantName()}
-      />
+    <div className="bg-slate-50 min-h-screen text-slate-800 font-sans selection:bg-blue-100">
+      
+      {/* 1. Header Navigation */}
+      <header className="border-b border-slate-100 bg-white/80 backdrop-blur-md sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white text-base font-black shadow-md shadow-blue-200">
+              D
+            </div>
+            <span className="font-extrabold text-slate-800 text-lg tracking-tight">Distributor OS</span>
+          </div>
 
-      {/* Main Workspace Frame */}
-      <div className="flex-1 pl-64 flex flex-col h-screen overflow-hidden">
-        {/* 2. Top Header */}
-        <DashboardHeader
-          activeTenantId={activeTenantId}
-          setActiveTenantId={setActiveTenantId}
-          tenantName={getTenantName()}
-        />
+          <nav className="hidden md:flex items-center gap-8">
+            <a href="#features" className="text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors uppercase tracking-wider">Features</a>
+            <a href="#pricing" className="text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors uppercase tracking-wider">Pricing</a>
+            <a href="#about" className="text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors uppercase tracking-wider">Solutions</a>
+          </nav>
 
-        {/* 3. Dashboard Scrollable Content */}
-        <main className="flex-1 mt-16 p-6 overflow-y-auto space-y-6">
-          {/* Dashboard Control Header */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link 
+              href="/auth" 
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-100 flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>Launch 15-Day Free Trial</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {/* 2. Hero Section */}
+      <section className="py-20 px-6 max-w-7xl mx-auto text-center relative overflow-hidden">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-100/30 rounded-full blur-3xl -z-10 animate-pulse" />
+        
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-blue-50 border border-blue-100/50 rounded-full text-blue-700 text-[11px] font-bold uppercase tracking-wider mb-6">
+          <Sparkles className="w-3.5 h-3.5 animate-spin-slow text-blue-500" />
+          <span>Next-Generation Supply Chain Cockpit</span>
+        </div>
+
+        <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-slate-900 tracking-tight max-w-4xl mx-auto leading-[1.1]">
+          Modern Operations Control Center for <span className="text-blue-600">B2B Distributors</span>
+        </h1>
+        
+        <p className="text-sm sm:text-base text-slate-500 max-w-2xl mx-auto mt-6 leading-relaxed font-semibold">
+          Ingest unstructured WhatsApp orders instantly with AI, allocate optimization route delivery sheets to driver terminals, and monitor warehouse stock levels.
+        </p>
+
+        <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+          <Link 
+            href="/auth" 
+            className="w-full sm:w-auto px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <span>Launch Free Trial</span>
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+          <a 
+            href="#features" 
+            className="w-full sm:w-auto px-8 py-3.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-1.5"
+          >
+            Explore Features
+          </a>
+        </div>
+      </section>
+
+      {/* 3. Features Grid */}
+      <section id="features" className="py-20 px-6 max-w-7xl mx-auto border-t border-slate-100">
+        <div className="text-center max-w-xl mx-auto mb-16">
+          <h2 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">Supercharged features built for scale</h2>
+          <p className="text-xs text-slate-400 font-bold mt-2 uppercase tracking-widest">Core Capabilities</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          
+          {/* Card 1 */}
+          <div className="bg-white border border-slate-100 rounded-2xl p-8 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-[300px]">
+            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-sm">
+              <MessageSquare className="w-5 h-5" />
+            </div>
             <div>
-              <h1 className="text-xl font-bold text-slate-800 tracking-tight">Dashboard</h1>
-              <p className="text-xs text-slate-400 font-semibold mt-0.5">Real-time operational workflow management</p>
+              <h3 className="text-lg font-bold text-slate-800 mb-2">WhatsApp AI Ingestion</h3>
+              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                Automatically parse unstructured Hinglish message streams or audio memos into canonical draft digital orders. Gemini AI maps products, quantities, and customer profile details.
+              </p>
+            </div>
+          </div>
+
+          {/* Card 2 */}
+          <div className="bg-white border border-slate-100 rounded-2xl p-8 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-[300px]">
+            <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shadow-sm">
+              <Map className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-800 mb-2">Real-Time Route Sheets</h3>
+              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                Compile unallocated confirmed invoice checkpoints into optimal transport run sheets. Track drivers, vehicle assignments, and milestone delivery completions instantly.
+              </p>
+            </div>
+          </div>
+
+          {/* Card 3 */}
+          <div className="bg-white border border-slate-100 rounded-2xl p-8 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-[300px]">
+            <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-sm">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-800 mb-2">Digital Stock Ledger</h3>
+              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                Strict inequality low-stock bounds prevent fulfillment lockups. Maintain a clean ledger mapping real warehouse location bins, threshold counts, and Tally/Marg ERP catalog sync.
+              </p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      {/* 4. Pricing Matrices */}
+      <section id="pricing" className="py-20 px-6 max-w-7xl mx-auto border-t border-slate-100 bg-slate-50">
+        <div className="text-center max-w-xl mx-auto mb-16">
+          <h2 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">Simple, transparent, self-service pricing</h2>
+          <p className="text-xs text-slate-400 font-bold mt-2 uppercase tracking-widest">pricing matrices</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          
+          {/* Tier 1 */}
+          <div className="bg-white border border-slate-150 rounded-2xl p-8 shadow-sm flex flex-col justify-between min-h-[420px]">
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400">Starter</span>
+              <h3 className="text-xl font-bold text-slate-800 mt-1">Micro Warehousing</h3>
+              <div className="mt-4 flex items-baseline gap-1 text-slate-800">
+                <span className="text-3xl font-extrabold">₹4,999</span>
+                <span className="text-xs text-slate-400 font-semibold">/month</span>
+              </div>
+              <p className="text-xs text-slate-500 font-semibold mt-3">Essential tools for single-warehouse local distributors.</p>
+              
+              <ul className="mt-6 space-y-3">
+                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>1 Warehouse & Location Track</span>
+                </li>
+                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>100 AI Ingestions / month</span>
+                </li>
+                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Standard Route Sheet Exports</span>
+                </li>
+              </ul>
             </div>
             
-            {/* Date Picker & Action Controls */}
-            <div className="flex items-center gap-3">
-              {error && (
-                <button
-                  onClick={refreshAll}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-lg hover:bg-rose-100 transition-all"
-                  title={error}
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Reload Connection</span>
-                </button>
-              )}
-
-              {/* Date Filter Dropdown */}
-              <button className="flex items-center gap-2 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
-                <span>21 May – 27 May, 2025</span>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-              </button>
-
-              {/* Customize Layout */}
-              <button className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
-                <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
-                <span>Customize</span>
-              </button>
-            </div>
+            <Link href="/auth" className="mt-8 w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs text-center transition-all cursor-pointer block">
+              Get Started
+            </Link>
           </div>
 
-          {/* A. Core Operational Metrics Row */}
-          <MetricCards metrics={metrics} />
-
-          {/* B. Split Middle Pane (Recent Orders vs Collections Aging Donut) */}
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            {/* Left Col: Recent Orders Table (60% width) */}
-            <div className="lg:col-span-3 min-h-[380px]">
-              
-              {/* WhatsApp Ingestion Simulator Card Widget */}
-              <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm mb-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-xl">📱</span>
-                  <h3 className="font-semibold text-slate-800 text-lg">WhatsApp Ingestion Simulator</h3>
-                </div>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Select Simulating Customer Node</label>
-                    <select id="mock-sender-phone" className="w-full p-2.5 rounded-lg border border-slate-200 text-sm bg-slate-50 text-slate-700 bg-white">
-                      <option value="+919999888877">Kaveri Provision Store (+91 99998 88877)</option>
-                      <option value="+919999777766">Maruthi Stores (+91 99997 77766)</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Type Incoming WhatsApp Text (Hinglish/Unstructured)</label>
-                    <textarea 
-                      id="mock-message-text" 
-                      rows={3} 
-                      className="w-full p-2.5 rounded-lg border border-slate-200 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-brand-blue"
-                      placeholder="e.g., Bhaiya, Kaveri store se bol raha hu. 50 piece Tata Soap urgently route kar do..."
-                    />
-                  </div>
-                  
-                  <button 
-                    onClick={async () => {
-                      const phone = (document.getElementById('mock-sender-phone') as HTMLSelectElement).value;
-                      const text = (document.getElementById('mock-message-text') as HTMLTextAreaElement).value;
-                      if(!text.trim()) {
-                        showToast('Please enter a mock message string.', 'error');
-                        return;
-                      }
-                      
-                      try {
-                        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
-                        const res = await fetch(`${apiBase}/api/v1/whatsapp/webhook`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ 
-                            tenant_id: activeTenantId, 
-                            phone_number: phone, 
-                            sender_phone: phone, 
-                            message_text: text 
-                          })
-                        });
-                        if(res.ok) {
-                          showToast('Order processed successfully via AI engine pipeline!', 'success');
-                          refreshAll(); // Silent background refetch
-                        } else {
-                          showToast('Pipeline execution failed: ' + res.statusText, 'error');
-                        }
-                      } catch(err) {
-                        showToast('Network connection breakdown.', 'error');
-                      }
-                    }}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm p-2.5 rounded-lg transition-colors shadow-sm cursor-pointer"
-                  >
-                    ⚡ Simulate Webhook Ingestion
-                  </button>
-                </div>
+          {/* Tier 2 */}
+          <div className="bg-white border-2 border-blue-500 rounded-2xl p-8 shadow-md flex flex-col justify-between min-h-[420px] relative">
+            <div className="absolute top-0 right-6 -translate-y-1/2 bg-blue-500 text-white text-[9px] font-black uppercase tracking-wider px-3 py-1 rounded-full">
+              Most Popular
+            </div>
+            <div>
+              <span className="text-[10px] uppercase font-bold text-blue-500">Growth</span>
+              <h3 className="text-xl font-bold text-slate-800 mt-1">Professional Fleet</h3>
+              <div className="mt-4 flex items-baseline gap-1 text-slate-800">
+                <span className="text-3xl font-extrabold">₹9,999</span>
+                <span className="text-xs text-slate-400 font-semibold">/month</span>
               </div>
-
-              <RecentOrders
-                orders={recentOrders}
-                fetchOrderDetails={fetchOrderDetails}
-                selectedOrderDetails={selectedOrderDetails}
-                loadingDetails={loadingDetails}
-                closeDetails={closeDetails}
-                onSuccess={(msg) => {
-                  showToast(msg, "success");
-                  refreshAll();
-                }}
-                onError={(msg) => showToast(msg, "error")}
-                activeTenantId={activeTenantId}
-              />
+              <p className="text-xs text-slate-500 font-semibold mt-3">Complete operational cockpit for mid-size distributor networks.</p>
+              
+              <ul className="mt-6 space-y-3">
+                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>3 Warehouses & Bin Control</span>
+                </li>
+                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Unlimited AI Ingestions & Webhooks</span>
+                </li>
+                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Live Driver Optimization Run Sheets</span>
+                </li>
+                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>FIFO Collection Allocation & Ledgers</span>
+                </li>
+              </ul>
             </div>
-
-            {/* Right Col: Collections Donut Chart (40% width) */}
-            <div className="lg:col-span-2 min-h-[380px] flex flex-col gap-6">
-              <CollectionsDonut data={donutData} />
-            </div>
+            
+            <Link href="/auth" className="mt-8 w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs text-center transition-all shadow-md shadow-blue-100 cursor-pointer block">
+              Launch 15-Day Free Trial
+            </Link>
           </div>
 
-          {/* C. Bottom Operational Grid (Live Map, Stock Summary, Activity Feed) */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="min-h-[300px]">
-              <LiveDeliveries />
+          {/* Tier 3 */}
+          <div className="bg-white border border-slate-150 rounded-2xl p-8 shadow-sm flex flex-col justify-between min-h-[420px]">
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400">Enterprise</span>
+              <h3 className="text-xl font-bold text-slate-800 mt-1">Industrial ERP</h3>
+              <div className="mt-4 flex items-baseline gap-1 text-slate-800">
+                <span className="text-3xl font-extrabold">Custom</span>
+              </div>
+              <p className="text-xs text-slate-500 font-semibold mt-3">High-volume deployment with custom database integrations.</p>
+              
+              <ul className="mt-6 space-y-3">
+                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Unlimited Warehouses</span>
+                </li>
+                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Custom CRM/ODBC Tally integrations</span>
+                </li>
+                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Dedicated Server Instance & SLA</span>
+                </li>
+              </ul>
             </div>
-            <div className="min-h-[300px]">
-              <InventorySummary data={metrics || undefined} />
-            </div>
-            <div className="min-h-[300px]">
-              <ActivityFeed activities={activities} />
-            </div>
+            
+            <button className="mt-8 w-full py-2.5 bg-slate-850 hover:bg-slate-950 text-white font-bold rounded-xl text-xs text-center transition-all cursor-pointer">
+              Contact Sales
+            </button>
           </div>
-        </main>
-      </div>
 
-      {/* WhatsApp Ingestion Live testing simulator */}
-      <WhatsAppSimulator
-        activeTenantId={activeTenantId}
-        onSuccess={refreshAll}
-      />
-
-      {/* Sleek Floating Toast Notification */}
-      {toast.show && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 backdrop-blur-md border border-slate-100 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
-          {toast.type === "success" ? (
-            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 shadow-sm">
-              <CheckCircle2 className="w-4.5 h-4.5" />
-            </div>
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 shrink-0 shadow-sm">
-              <AlertCircle className="w-4.5 h-4.5" />
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-slate-800">{toast.type === "success" ? "Success" : "Error"}</p>
-            <p className="text-[11px] text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
-          </div>
-          <button 
-            onClick={() => setToast(prev => ({ ...prev, show: false }))}
-            className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 transition-all shrink-0"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
         </div>
-      )}
+      </section>
+
+      {/* 5. Footer */}
+      <footer className="border-t border-slate-100 bg-white py-12 px-6 text-center">
+        <p className="text-[11px] text-slate-400 font-semibold">
+          © 2026 Distributor OS. All rights reserved. Supply chain control pipelines engineered for modern distributors.
+        </p>
+      </footer>
+
     </div>
   );
 }
