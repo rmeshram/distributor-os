@@ -15,7 +15,9 @@ import {
   FileText,
   Zap,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  MessageSquare,
+  Settings
 } from "lucide-react";
 
 interface SidebarProps {
