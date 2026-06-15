@@ -393,6 +393,7 @@ def get_dashboard_metrics(
         select(func.sum(OrderLineItem.quantity * OrderLineItem.unit_price))
         .join(Order, OrderLineItem.order_id == Order.id)
         .where(Order.id.in_(valid_orders_sub))
+        .where(Order.tenant_id == tenant_id)  # CRITICAL: tenant isolation
     )
     if start_dt:
         total_sales_stmt = total_sales_stmt.where(Order.created_at >= start_dt)
@@ -425,6 +426,7 @@ def get_dashboard_metrics(
             select(func.sum(OrderLineItem.quantity * OrderLineItem.unit_price))
             .join(Order, OrderLineItem.order_id == Order.id)
             .where(Order.id.in_(valid_orders_sub))
+            .where(Order.tenant_id == tenant_id)  # CRITICAL: tenant isolation
             .where(Order.created_at >= hist_start_dt)
             .where(Order.created_at <= hist_end_dt)
         )
@@ -449,7 +451,7 @@ def get_dashboard_metrics(
 
     # 4. Outstanding Collections (Snapshot - Timeframe-Irrespective)
     # Always run sum aggregation over the live, current ledger/invoice state tables
-    outstanding_stmt = select(func.sum(Invoice.total_amount))
+    outstanding_stmt = select(func.sum(Invoice.total_amount)).where(Invoice.tenant_id == tenant_id)
     outstanding = db.execute(outstanding_stmt).scalar() or 0.0
 
     # 5. Inventory counts (Low Stock, Out of Stock, Total SKUs, Inventory Value)
@@ -543,7 +545,7 @@ def get_recent_orders(
     ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
-    orders = db.query(Order).order_by(Order.created_at.desc()).limit(5).all()
+    orders = db.query(Order).filter(Order.tenant_id == tenant_id).order_by(Order.created_at.desc()).limit(5).all()
     results = []
     
     for o in orders:
@@ -628,7 +630,7 @@ def get_collections_donut(
 
     # Dynamic calculation based on invoice dates
     now = datetime.utcnow()
-    invoices = db.query(Invoice).all()
+    invoices = db.query(Invoice).filter(Invoice.tenant_id == tenant_id).all()
 
     buckets = {
         "0-15 Days": 0.0,

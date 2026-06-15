@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import Link from "next/link";
 import { Search, Bell, MessageSquare, Calendar, ChevronDown } from "lucide-react";
 
@@ -17,50 +17,26 @@ export default function DashboardHeader({
   tenantName,
   userProfile
 }: DashboardHeaderProps) {
-  const [internalProfile, setInternalProfile] = useState<any>(null);
-
-  useEffect(() => {
-    if (userProfile) {
-      setInternalProfile(userProfile);
-      return;
-    }
-    const fetchProfile = async () => {
-      try {
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-        const resp = await fetch(`${apiBase}/api/v1/auth/me`, {
-          method: "GET",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          }
-        });
-
-        // Redirect to auth on 401 (expired/missing cookie)
-        if (resp.status === 401) {
-          localStorage.removeItem("tenant_id");
-          localStorage.removeItem("tenant_name");
-          window.location.href = "/auth";
-          return;
-        }
-
-        if (resp.ok) {
-          const data = await resp.json();
-          setInternalProfile(data);
-          if (data.tenant?.name) {
-            localStorage.setItem("tenant_name", data.tenant.name);
-          }
-        }
-      } catch (err) {
-        // Network failure — redirect to auth
-        console.error("DashboardHeader failed to load profile:", err);
-        window.location.href = "/auth";
-        return;
+  // Use the parent-provided userProfile directly; no redundant /auth/me fetch
+  // The parent dashboard page already handles authentication and 401 redirects
+  const displayProfile = userProfile || (() => {
+    // Fallback: construct a minimal profile from localStorage for sub-pages
+    if (typeof window !== "undefined") {
+      const storedName = localStorage.getItem("tenant_name");
+      const storedFullName = localStorage.getItem("userFullName");
+      const storedRole = localStorage.getItem("userRole");
+      const storedTenantId = localStorage.getItem("tenant_id");
+      if (storedTenantId) {
+        return {
+          full_name: storedFullName || "",
+          role: storedRole || "",
+          tenant: { id: storedTenantId, name: storedName || "My Workspace" }
+        };
       }
-    };
-    fetchProfile();
-  }, [userProfile]);
+    }
+    return null;
+  })();
 
-  const displayProfile = userProfile || internalProfile;
   return (
     <header className="h-16 bg-white border-b border-dashboard-border flex items-center justify-between px-8 fixed top-0 right-0 left-64 z-10 shadow-sm">
       {/* Search Input and Channel Selector */}

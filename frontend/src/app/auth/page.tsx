@@ -31,6 +31,7 @@ export default function AuthPage() {
     try {
       const res = await fetch(`${apiBase}/api/v1/auth/request-otp`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mobile_number: mobileNumber }),
       });
@@ -63,6 +64,7 @@ export default function AuthPage() {
     try {
       const response = await fetch(`${apiBase}/api/v1/auth/verify-otp`, {
         method: "POST",
+        credentials: "include",  // CRITICAL: Captures the HttpOnly Set-Cookie from server
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mobile_number: mobileNumber, otp_code: otpCode }),
       });
