@@ -72,10 +72,12 @@ export default function InventorySummary({
       </div>
 
       {/* Warning notice */}
-      <div className="mt-4 p-3 bg-amber-50/70 border border-amber-200 rounded-xl flex items-center gap-2.5 text-xs text-amber-800">
-        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-        <span className="font-semibold">12 SKUs are below minimum stock level</span>
-      </div>
+      {lowStock > 0 && (
+        <div className="mt-4 p-3 bg-amber-50/70 border border-amber-200 rounded-xl flex items-center gap-2.5 text-xs text-amber-800">
+          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+          <span className="font-semibold">{lowStock} SKUs are below minimum stock level</span>
+        </div>
+      )}
     </div>
   );
 }

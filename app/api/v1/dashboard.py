@@ -425,12 +425,13 @@ def get_dashboard_metrics(
     outstanding = db.execute(outstanding_stmt).scalar() or 0.0
 
     # 5. Inventory counts (Low Stock, Out of Stock, Total SKUs, Inventory Value)
-    total_skus_count = db.query(Product).filter(Product.tenant_id == tenant_id).count()
+    total_skus_count = db.query(Inventory).filter(Inventory.tenant_id == tenant_id).count()
 
     low_stock_count = db.query(Inventory).filter(
         and_(
             Inventory.tenant_id == tenant_id,
-            Inventory.quantity_on_hand <= Inventory.low_stock_threshold
+            Inventory.quantity_on_hand <= Inventory.low_stock_threshold,
+            Inventory.quantity_on_hand > 0
         )
     ).count()
 

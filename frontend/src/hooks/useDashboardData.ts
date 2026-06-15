@@ -16,6 +16,8 @@ export interface DashboardMetrics {
   total_skus_count?: number;
   inventory_value?: string;
   overdue_60_count?: number;
+  total_skus?: number;
+  total_inventory_value?: number;
 }
 
 export interface RecentOrder {
