@@ -9,6 +9,7 @@ from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.shipment import Shipment
 from app.models.user import User
 from app.database import tenant_context
+from app.utils.security import sign_jwt
 
 
 @pytest.fixture(name="client")
@@ -72,9 +73,13 @@ def test_shipment_endpoints(db_session, client):
     assert drivers_list[0]["full_name"] == "John Doe"
     assert drivers_list[0]["phone_number"] == "+919999888877"
 
+    # Set JWT token cookie to authorize requests to /shipments endpoints
+    token = sign_jwt({"user_id": str(uuid.uuid4()), "tenant_id": str(tenant.id), "role": "SUPER_ADMIN"})
+    client.cookies.set("access_token", token)
+
     # 1. Call GET /pending
 
-    response = client.get(f"/api/v1/shipments/pending?tenant_id={tenant.id}")
+    response = client.get("/api/v1/shipments/pending")
     assert response.status_code == 200
     pending_data = response.json()
     assert len(pending_data) == 1
@@ -83,7 +88,7 @@ def test_shipment_endpoints(db_session, client):
 
     # 2. Call POST to create shipment
     response = client.post(
-        f"/api/v1/shipments?tenant_id={tenant.id}",
+        "/api/v1/shipments",
         json={
             "driver_id": str(driver.id),
             "vehicle_number": "KA-05-AB-1234",
@@ -96,7 +101,7 @@ def test_shipment_endpoints(db_session, client):
     assert response.json()["count"] == 1
 
     # 3. Call GET /active
-    response = client.get(f"/api/v1/shipments/active?tenant_id={tenant.id}")
+    response = client.get("/api/v1/shipments/active")
     assert response.status_code == 200
     active_data = response.json()
     assert len(active_data) == 1

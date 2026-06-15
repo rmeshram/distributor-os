@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header
 from pydantic import BaseModel
 from sqlalchemy import func, select, and_
 from sqlalchemy.orm import Session, aliased
@@ -9,7 +9,7 @@ from app.models.customer import Customer
 from app.models.shipment import Shipment
 from app.models.invoice import Invoice
 from app.models.user import User
-from app.api.v1.dashboard import ensure_demo_data
+from app.api.v1.dashboard import ensure_demo_data, resolve_tenant_id
 
 
 router = APIRouter(prefix="/shipments", tags=["Shipments"])
@@ -26,11 +26,13 @@ class ShipmentStatusPayload(BaseModel):
 
 @router.get("/pending")
 def get_pending_shipments(
-    tenant_id: uuid.UUID,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ):
-    ensure_demo_data(db, tenant_id)
-    tenant_context.set(tenant_id)
+    extracted_tenant_id = resolve_tenant_id(None, access_token, authorization)
+    ensure_demo_data(db, extracted_tenant_id)
+    tenant_context.set(extracted_tenant_id)
 
     # 1. Confirmed orders subquery
     ledger_alias = aliased(OrderStateLedger)
@@ -38,13 +40,13 @@ def get_pending_shipments(
         select(OrderStateLedger.order_id)
         .where(
             and_(
-                OrderStateLedger.tenant_id == tenant_id,
+                OrderStateLedger.tenant_id == extracted_tenant_id,
                 OrderStateLedger.to_status == "Confirmed",
                 OrderStateLedger.timestamp == (
                     select(func.max(ledger_alias.timestamp))
                     .where(
                         and_(
-                            ledger_alias.tenant_id == tenant_id,
+                            ledger_alias.tenant_id == extracted_tenant_id,
                             ledger_alias.order_id == OrderStateLedger.order_id
                         )
                     )
@@ -55,14 +57,14 @@ def get_pending_shipments(
     )
 
     # 2. Query shipments already made
-    shipment_order_ids = select(Shipment.order_id).where(Shipment.tenant_id == tenant_id)
+    shipment_order_ids = select(Shipment.order_id).where(Shipment.tenant_id == extracted_tenant_id)
 
     # 3. Filter orders lacking shipments
     pending_orders = (
         db.query(Order)
         .filter(
             and_(
-                Order.tenant_id == tenant_id,
+                Order.tenant_id == extracted_tenant_id,
                 Order.id.in_(confirmed_orders_sub),
                 Order.id.not_in(shipment_order_ids)
             )
@@ -92,13 +94,15 @@ def get_pending_shipments(
 
 @router.get("/active")
 def get_active_shipments(
-    tenant_id: uuid.UUID,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ):
-    ensure_demo_data(db, tenant_id)
-    tenant_context.set(tenant_id)
+    extracted_tenant_id = resolve_tenant_id(None, access_token, authorization)
+    ensure_demo_data(db, extracted_tenant_id)
+    tenant_context.set(extracted_tenant_id)
 
-    shipments = db.query(Shipment).filter(Shipment.tenant_id == tenant_id).all()
+    shipments = db.query(Shipment).filter(Shipment.tenant_id == extracted_tenant_id).all()
     results = []
     for s in shipments:
         order = db.get(Order, s.order_id)
@@ -132,14 +136,14 @@ def get_active_shipments(
         })
 
     # Seed initial test run for default demo tenant to make layout visual pop
-    if not results and tenant_id == uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d"):
+    if not results and extracted_tenant_id == uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d"):
         order = db.query(Order).filter(Order.internal_order_id == "ORD-2505-1482").first()
         if order:
             customer = db.get(Customer, order.customer_id)
             dest = customer.address_text if customer else "Bengaluru"
             new_shipment = Shipment(
                 id=uuid.uuid4(),
-                tenant_id=tenant_id,
+                tenant_id=extracted_tenant_id,
                 order_id=order.id,
                 carrier="Ramesh Kumar",
                 tracking_id="KA-01-MJ-9876",
@@ -148,18 +152,20 @@ def get_active_shipments(
             )
             db.add(new_shipment)
             db.commit()
-            return get_active_shipments(tenant_id, db)
+            return get_active_shipments(access_token, authorization, db)
 
     return results
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_shipment(
     payload: ShipmentCreatePayload,
-    tenant_id: uuid.UUID,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ):
-    ensure_demo_data(db, tenant_id)
-    tenant_context.set(tenant_id)
+    extracted_tenant_id = resolve_tenant_id(None, access_token, authorization)
+    ensure_demo_data(db, extracted_tenant_id)
+    tenant_context.set(extracted_tenant_id)
 
     driver = db.get(User, payload.driver_id)
     if not driver:
@@ -185,7 +191,7 @@ def create_shipment(
 
         new_shipment = Shipment(
             id=uuid.uuid4(),
-            tenant_id=tenant_id,
+            tenant_id=extracted_tenant_id,
             order_id=order_id,
             carrier=driver_name,
             tracking_id=payload.vehicle_number,
@@ -198,7 +204,7 @@ def create_shipment(
         # Transition order to Dispatched in ledger
         db.add(OrderStateLedger(
             id=uuid.uuid4(),
-            tenant_id=tenant_id,
+            tenant_id=extracted_tenant_id,
             order_id=order_id,
             from_status=order.current_status,
             to_status="Dispatched",
