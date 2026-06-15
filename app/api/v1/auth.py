@@ -137,7 +137,7 @@ def verify_otp(
         value=token,
         httponly=True,
         secure=True,
-        samesite="lax",
+        samesite="none",  # MANDATORY for cross-site cookie transmission on decoupled domains
         max_age=3600 * 24
     )
     

@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
@@ -36,10 +38,20 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Enforce open CORS configuration so cloud frontend can query seamlessly
+# Build CORS allowed origins from environment variable
+# On Render, set ALLOWED_ORIGINS to the production frontend URL (comma-separated for multiple)
+# e.g. ALLOWED_ORIGINS=https://distributor-os-frontend.onrender.com
+_default_origins = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000"
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("ALLOWED_ORIGINS", _default_origins).split(",")
+    if origin.strip()
+]
+
+# Enforce explicit CORS origins so credentials (HttpOnly cookies) transmit correctly
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
