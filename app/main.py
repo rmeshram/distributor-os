@@ -10,6 +10,15 @@ from app.database import engine, Base
 Base.metadata.create_all(bind=engine)
 
 from sqlalchemy import text
+
+# Dynamic Database Patches for Production Neon PostgreSQL Lifecycle
+try:
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid VARCHAR(128) UNIQUE;"))
+        conn.commit()
+except Exception:
+    pass
+
 try:
     with engine.connect() as conn:
         conn.execute(text("ALTER TABLE products ADD COLUMN stock_quantity INTEGER DEFAULT 100"))
