@@ -47,11 +47,17 @@ class Order(Base, TenantMixin):
             )
             res = session.execute(stmt).scalar()
             if res:
+                if res == "NEEDS_REVIEW":
+                    return "Needs Review"
                 return res
+
         # Fallback to in-memory collection if session is not available or query returns empty
         if self.ledger_entries:
             sorted_entries = sorted(self.ledger_entries, key=lambda e: e.timestamp, reverse=True)
-            return sorted_entries[0].to_status
+            val = sorted_entries[0].to_status
+            if val == "NEEDS_REVIEW":
+                return "Needs Review"
+            return val
         return "Draft"
 
 class OrderLineItem(Base, TenantMixin):

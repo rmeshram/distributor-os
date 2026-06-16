@@ -176,13 +176,19 @@ def handle_whatsapp_webhook(
                     "rate": float(product.base_price)
                 })
             else:
-                return {
-                    "status": "error",
-                    "message": f"Could not find matching product in your catalog for token: '{token}'",
-                    "error_message": f"Could not find matching product in your catalog for token: '{token}'",
-                    "failed_rows": [token],
-                    "job_id": "ERR-VAL-404"
-                }
+                # Unmatched State: Assign parameters and flag unmatched
+                has_unmatched = True
+                parsed_items.append({
+                    "product_name": f"Unmatched: {token}",
+                    "sku_code": "UNMATCHED_SKU",
+                    "sku_id": "UNMATCHED_SKU",
+                    "brand": token,  # Save unmapped token string in brand to populate triage UI
+                    "category": "Grocery",
+                    "pack_size": "1 unit",
+                    "qty": qty,
+                    "wholesale_rate": 0.0,
+                    "rate": 0.0
+                })
 
         # 3. Create unique Parent Order ID string
         generated_order_id = f"ORD-2506-{uuid.uuid4().hex[:4].upper()}"
@@ -196,14 +202,14 @@ def handle_whatsapp_webhook(
             customer_id=customer.id,
             created_at=datetime.utcnow()
         )
-        new_order.status = "Needs Review" if has_unmatched else "Draft"
+        new_order.status = "NEEDS_REVIEW" if has_unmatched else "Draft"
         db.add(new_order)
         db.flush()
 
         # 5. Loop through and write line item child records to DB
         for item in parsed_items:
-            # Resolve product
-            product = db.query(Product).filter_by(sku_id=item["sku_code"]).first()
+            # Resolve product by SKU and Brand to ensure unique brand per unmatched token
+            product = db.query(Product).filter_by(sku_id=item["sku_code"], brand=item["brand"]).first()
             if not product:
                 product = Product(
                     id=uuid.uuid4(),
@@ -238,7 +244,7 @@ def handle_whatsapp_webhook(
             ))
 
         # Parent State Conditionals
-        order_status = "Needs Review" if has_unmatched else "Draft"
+        order_status = "NEEDS_REVIEW" if has_unmatched else "Draft"
         new_order.status = order_status
 
         # Record state transition (maps to Pending status in Recent Orders UI)
@@ -270,6 +276,7 @@ def handle_whatsapp_webhook(
             "job_id": str(uuid.uuid4()),
             "successful_rows": 1,
             "failed_rows": 0,
+            "message": "Order captured successfully but requires manual assignment." if has_unmatched else "Ingestion completed successfully!",
             "error_message": None
         }
 
