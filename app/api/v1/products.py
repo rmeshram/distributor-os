@@ -98,12 +98,32 @@ def adjust_stock(
         )
         
     product.stock_quantity += payload.quantity_received
+    
+    # Also update or create the Inventory table record for joined queries
+    inv = db.query(Inventory).filter(Inventory.sku_id == product.id).first()
+    if inv:
+        inv.quantity_on_hand += payload.quantity_received
+    else:
+        inv = Inventory(
+            tenant_id=tenant_id,
+            sku_id=product.id,
+            location="Aisle-A1",
+            quantity_on_hand=payload.quantity_received,
+            quantity_committed=0,
+            low_stock_threshold=10
+        )
+        db.add(inv)
+
     db.commit()
     
     return {
         "status": "success",
+        "id": str(product.id),
         "sku_id": product.sku_id,
-        "new_stock": product.stock_quantity
+        "sku": product.sku_id,
+        "product_name": f"{product.brand} {product.category}",
+        "stock_quantity": inv.quantity_on_hand if inv else product.stock_quantity,
+        "new_stock": inv.quantity_on_hand if inv else product.stock_quantity
     }
 
 
@@ -142,14 +162,15 @@ def get_inventory_items(
     """
     ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
-    items = db.query(Product, Inventory).join(Inventory, Product.id == Inventory.sku_id).filter(Product.tenant_id == tenant_id).all()
+    items = db.query(Product, Inventory).outerjoin(Inventory, Product.id == Inventory.sku_id).filter(Product.tenant_id == tenant_id).all()
     return [
         {
             "id": str(p.id),
             "sku_id": p.sku_id,
+            "sku": p.sku_id,
             "product_name": f"{p.brand} {p.category}",
-            "stock_quantity": inv.quantity_on_hand,
-            "low_stock_threshold": inv.low_stock_threshold
+            "stock_quantity": inv.quantity_on_hand if inv is not None else 0,
+            "low_stock_threshold": inv.low_stock_threshold if inv is not None else 10
         }
         for p, inv in items
     ]

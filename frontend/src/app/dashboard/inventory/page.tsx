@@ -8,6 +8,7 @@ import { Search, Loader2, RefreshCw, AlertCircle, Box, AlertTriangle, CheckCircl
 interface InventoryItem {
   id: string;
   sku_id: string;
+  sku: string;
   product_name: string;
   stock_quantity: number;
   low_stock_threshold?: number;
@@ -21,7 +22,7 @@ const getStockStatus = (quantity: number, threshold: number) => {
 
 export default function InventoryPage() {
   const [activeTenantId, setActiveTenantId] = useState("");
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [skuList, setSkuList] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -77,7 +78,7 @@ export default function InventoryPage() {
       });
       if (!resp.ok) throw new Error("Failed to fetch inventory levels");
       const data = await resp.json();
-      setInventory(data);
+      setInventoryItems(data);
       setError(null);
     } catch (err: any) {
       console.error("Inventory load failed:", err);
@@ -107,7 +108,7 @@ export default function InventoryPage() {
 
   useEffect(() => {
     if (!activeTenantId) return;
-    setInventory([]);
+    setInventoryItems([]);
     fetchInventory(activeTenantId);
     fetchSkuList(activeTenantId);
   }, [activeTenantId, fetchInventory, fetchSkuList]);
@@ -132,7 +133,7 @@ export default function InventoryPage() {
     setSubmitting(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/products/adjust-stock?tenant_id=${activeTenantId}`, {
+      const response = await fetch(`${apiBase}/api/v1/products/adjust-stock?tenant_id=${activeTenantId}`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -142,33 +143,24 @@ export default function InventoryPage() {
         })
       });
       
-      const data = await resp.json();
-      if (resp.ok) {
+      const responseData = await response.json();
+      if (response.ok) {
         showToast(`Successfully replenished ${qtyInt} units of SKU ${sku_id}!`, "success");
         setFormData({ sku_id: "", quantity_received: "" });
         
-        // Dynamically update the local state array immediately
-        setInventory(prevItems => {
-          const exists = prevItems.some(item => item.sku_id === data.sku_id);
+        // Force the table state to instantly include or update the modified item
+        setInventoryItems(prevItems => {
+          const exists = prevItems.some(item => item.sku === responseData.sku);
           if (exists) {
-            return prevItems.map(item => 
-              item.sku_id === data.sku_id ? { ...item, stock_quantity: data.new_stock } : item
-            );
+            return prevItems.map(item => item.sku === responseData.sku ? responseData : item);
           }
-          // Fallback placeholder
-          const newPlaceholder: InventoryItem = {
-            id: Math.random().toString(),
-            sku_id: data.sku_id,
-            product_name: data.sku_id,
-            stock_quantity: data.new_stock
-          };
-          return [newPlaceholder, ...prevItems];
+          return [responseData, ...prevItems];
         });
 
         fetchInventory(activeTenantId); // Instantly reload stock data grid and warnings
 
       } else {
-        const detail = data.detail || "Failed to inward stock batch.";
+        const detail = responseData.detail || "Failed to inward stock batch.";
         showToast(detail, "error");
       }
     } catch (err) {
@@ -180,7 +172,7 @@ export default function InventoryPage() {
   };
 
   // Handle live catalog filtering
-  const filteredInventory = inventory.filter(item => 
+  const filteredInventory = inventoryItems.filter(item => 
     item.sku_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.product_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
