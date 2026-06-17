@@ -91,10 +91,12 @@ def firebase_login(
     Flow:
       1. Verify the ID token cryptographically using the Firebase Admin SDK.
       2. Extract uid and phone_number from the decoded token.
-      3. If the phone number is not found in our database → new user path:
+      3. Normalize lookup parameters using a trailing 10-digit string evaluation 
+         to ignore varying country prefixes (+91, 91, etc.).
+      4. If the phone number is not found in our database → new user path:
          Return is_new_user=True so the frontend can route to the Company Name
          registration step. No DB writes occur here.
-      4. If the user already exists → existing user path:
+      5. If the user already exists → existing user path:
          Persist firebase_uid if not already stored, sign an internal JWT,
          set the access_token HttpOnly cookie, and return the session payload.
     """
@@ -124,16 +126,17 @@ def firebase_login(
             detail="Firebase token does not contain a verified phone_number claim.",
         )
 
-    # Step 2: Look up existing user by phone number or firebase_uid
+    # Step 2: Extract trailing 10 digits to normalize against country codes safely
+    clean_10_digits = phone_number[-10:] if phone_number else ""
+
+    # Look up user dynamically by matching trailing digits or explicit firebase_uid
     user = db.query(User).filter(
-        (User.phone_number == phone_number)
-        | (User.email_or_phone == phone_number)
+        (User.phone_number.like(f"%{clean_10_digits}"))
+        | (User.email_or_phone.like(f"%{clean_10_digits}"))
         | (User.firebase_uid == uid)
     ).first()
 
     # Step 3: New user path — no DB writes, return flag + short-lived signup token
-    # The signup_token encodes the verified phone/uid so the frontend can complete
-    # the Company Name registration step without a second Firebase round-trip.
     if not user:
         signup_token = sign_jwt(
             {
@@ -150,7 +153,6 @@ def firebase_login(
             "phone_number": phone_number,
             "signup_token": signup_token,
         }
-
 
     # Step 4: Existing user path — update firebase_uid if not yet stored
     if not user.firebase_uid:
@@ -252,8 +254,7 @@ def complete_signup(
 ):
     """
     Completes registration for a new user who passed Firebase Phone Auth.
-    Consumes the short-lived signup_token from firebase-login — no auto-provisioning
-    occurs until this endpoint is called from the onboarding flow.
+    Consumes the short-lived signup_token from firebase-login.
     """
     signup_payload = verify_signup_token(payload.signup_token)
     if not signup_payload:
@@ -265,11 +266,15 @@ def complete_signup(
     phone_number: str = signup_payload["phone_number"]
     firebase_uid: str = signup_payload["firebase_uid"]
 
+    # Normalize trailing digits check during new signup to prevent race-condition duplicates
+    clean_10_digits = phone_number[-10:] if phone_number else ""
+
     existing_user = db.query(User).filter(
-        (User.phone_number == phone_number)
-        | (User.email_or_phone == phone_number)
+        (User.phone_number.like(f"%{clean_10_digits}"))
+        | (User.email_or_phone.like(f"%{clean_10_digits}"))
         | (User.firebase_uid == firebase_uid)
     ).first()
+    
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -303,7 +308,7 @@ def complete_signup(
 
 
 # ---------------------------------------------------------------------------
-# GET /auth/me  (unchanged)
+# GET /auth/me (unchanged)
 # ---------------------------------------------------------------------------
 
 @router.get("/me", status_code=status.HTTP_200_OK)
@@ -352,7 +357,7 @@ def get_me(
 
 
 # ---------------------------------------------------------------------------
-# POST /auth/logout  (unchanged)
+# POST /auth/logout (unchanged)
 # ---------------------------------------------------------------------------
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
