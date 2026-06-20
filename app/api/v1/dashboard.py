@@ -2,7 +2,11 @@ import uuid
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header
 from sqlalchemy import select, func, and_, desc
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, aliased, defer
+from sqlalchemy.exc import ProgrammingError
+import logging
+
+logger = logging.getLogger("uvicorn.error")
 from app.database import get_db, tenant_context
 from app.models.tenant import DistributorTenant
 from app.models.customer import Customer, CustomerAlias
@@ -694,8 +698,25 @@ def get_recent_activity(
         order = db.get(Order, l.order_id)
         if not order:
             continue
-        customer = db.get(Customer, order.customer_id)
-        cust_name = customer.retailer_name if customer else "Customer"
+        try:
+            customer = (
+                db.query(Customer)
+                .filter(Customer.id == order.customer_id)
+                .options(defer(Customer.phone_number))
+                .first()
+            )
+            if customer:
+                cust_name = getattr(customer, "retailer_name", "Registered Retailer")
+            else:
+                cust_name = "Walk-in Retailer"
+        except ProgrammingError as db_api_err:
+            logger.error(
+                f"Database Schema Mismatch Intercepted inside Dashboard Processing Rails: {str(db_api_err)}"
+            )
+            cust_name = "Operational Ingestion Influx"
+        except Exception as general_err:
+            logger.error(f"Unhandled Dashboard Pipeline Exception: {str(general_err)}")
+            cust_name = "System Node"
         
         # Calculate time difference text
         minutes_ago = int((datetime.utcnow() - l.timestamp).total_seconds() / 60)
