@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { MessageSquare, Send, User, Phone, Radio, Sparkles, Inbox } from "lucide-react";
+import { MessageSquare, Send, User, Phone, Radio, Inbox } from "lucide-react";
 
 interface Customer {
   id: string;
@@ -74,7 +74,7 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
     setSelectedCustomerId(id);
     if (id === "custom") {
       setCustomName("Manual Operational Node");
-      setCustomPhone("+91");
+      setCustomPhone("+919999888877");
     } else {
       const match = customers.find((c) => c.id === id);
       if (match) {
@@ -138,7 +138,6 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
 
       if (response.ok) {
         setMessageText("");
-        showToast?.("Ingestion simulation request sent successfully!", "success");
         if (onSuccess) onSuccess();
       }
     } catch (err) {
