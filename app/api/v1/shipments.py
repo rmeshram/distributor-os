@@ -9,7 +9,8 @@ from app.models.customer import Customer
 from app.models.shipment import Shipment
 from app.models.invoice import Invoice
 from app.models.user import User
-from app.api.v1.dashboard import ensure_demo_data, resolve_tenant_id
+from app.services.tenant_service import resolve_tenant_id
+from app.services.demo_service import ensure_demo_data
 
 
 router = APIRouter(prefix="/shipments", tags=["Shipments"])

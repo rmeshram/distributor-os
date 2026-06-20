@@ -1,7 +1,8 @@
 import uuid
 from sqlalchemy import String, ForeignKey, Float, Numeric
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from app.database import Base, TenantMixin
+from app.utils.phone import normalize_phone_number
 
 class Customer(Base, TenantMixin):
     __tablename__ = "customers"
@@ -22,6 +23,10 @@ class Customer(Base, TenantMixin):
 
     aliases: Mapped[list["CustomerAlias"]] = relationship(back_populates="customer", cascade="all, delete-orphan")
 
+    @validates("phone_number")
+    def validate_phone_number(self, key, value):
+        return normalize_phone_number(value) if value else None
+
     @property
     def name(self) -> str:
         return self.retailer_name or "Mock Retailer Store"
@@ -41,3 +46,12 @@ class CustomerAlias(Base, TenantMixin):
     alias_value: Mapped[str] = mapped_column(String(255), nullable=False) # WhatsApp phone number or alternative name
 
     customer: Mapped[Customer] = relationship(back_populates="aliases")
+
+    @validates("alias_value")
+    def validate_alias_value(self, key, value):
+        # We only normalize it if it looks like a phone number (i.e. has digits)
+        # to prevent normalizing purely textual aliases if any exist
+        if value and any(c.isdigit() for c in value):
+            return normalize_phone_number(value)
+        return value
+

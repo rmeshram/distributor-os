@@ -21,20 +21,27 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
+from fastapi import Cookie, Header
 
 @router.get("", status_code=status.HTTP_200_OK)
 def list_orders(
-    tenant_id: uuid.UUID,
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ):
     """
     Returns all orders for a tenant.
     """
-    tenant_context.set(tenant_id)
+    from app.services.tenant_service import resolve_tenant_id
+    from app.services.demo_service import ensure_demo_data
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    ensure_demo_data(db, resolved_tenant_id)
+    tenant_context.set(resolved_tenant_id)
     orders_invoices = (
         db.query(Order, Invoice)
         .outerjoin(Invoice, Invoice.order_id == Order.id)
-        .filter(Order.tenant_id == tenant_id)
+        .filter(Order.tenant_id == resolved_tenant_id)
         .order_by(Order.created_at.desc())
         .all()
     )

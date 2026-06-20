@@ -9,6 +9,8 @@ from app.models.product import Product, ProductAlias
 from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.services.gemini_service import GeminiService
 from app.database import tenant_context
+from app.services.whatsapp_adapter import CanonicalWhatsAppMessage
+from app.utils.phone import normalize_phone_number
 
 logger = logging.getLogger(__name__)
 
@@ -19,14 +21,26 @@ class WhatsAppService:
     def process_whatsapp_message(
         self,
         db: Session,
-        tenant_id: uuid.UUID,
-        phone_number: str,
-        message_text: str
+        canonical_msg: CanonicalWhatsAppMessage = None,
+        tenant_id: uuid.UUID = None,
+        phone_number: str = None,
+        message_text: str = None
     ) -> IngestionJob:
         """
-        Receives an unstructured WhatsApp message, writes it to a staging job,
+        Receives a WhatsApp message (either via CanonicalWhatsAppMessage model or 
+        via raw individual parameters for backward compatibility), writes it to a staging job,
         processes it, and maps it to a canonical Order or logs errors.
         """
+        if canonical_msg is not None:
+            tenant_id = canonical_msg.tenant_id
+            phone_number = canonical_msg.sender_phone
+            message_text = canonical_msg.message_text
+            corr_id = canonical_msg.correlation_id or f"corr-srv-{uuid.uuid4().hex[:8]}"
+        else:
+            corr_id = f"corr-srv-{uuid.uuid4().hex[:8]}"
+
+        logger.info("[Ingestion Service - %s] Processing WhatsApp message", corr_id)
+
         # Set tenant isolation context
         tenant_context.set(tenant_id)
 
@@ -52,29 +66,35 @@ class WhatsAppService:
         db.flush()
 
         try:
-            # 2. Match Customer Alias (Phone number)
-            # Find customer with alias matching the phone number
+            # 2. Phone Number Normalization & Customer Alias Match
+            normalized_phone = normalize_phone_number(phone_number)
+            logger.info("[Ingestion Service - %s] Normalized sender phone: %s -> %s", corr_id, phone_number, normalized_phone)
+
             customer_query = (
                 select(Customer)
                 .join(CustomerAlias)
-                .where(CustomerAlias.alias_value == phone_number)
+                .where(CustomerAlias.alias_value == normalized_phone)
             )
             customer = db.execute(customer_query).scalar_one_or_none()
 
             if not customer:
-                error_msg = f"Unknown customer phone number: {phone_number}"
+                error_msg = f"Unknown customer phone number: {normalized_phone}"
+                logger.warning("[Ingestion Service - %s] Customer resolution failed: %s", corr_id, error_msg)
                 staging_row.status = "Failed"
                 staging_row.error_message = error_msg
                 job.failed_rows = 1
                 job.status = "Completed"
                 db.commit()
-                logger.warning(f"WhatsApp order failed: {error_msg}")
                 return job
 
-            # 3. Use LLM/Gemini to Parse unstructured text
+            logger.info("[Ingestion Service - %s] Customer matched: %s (ID: %s)", corr_id, customer.retailer_name, customer.id)
+
+            # 3. LLM Parsing
+            logger.info("[Ingestion Service - %s] Dispatching text to LLM parser", corr_id)
             parsed_order = self.gemini_service.parse_order_text(message_text)
             if not parsed_order.items:
                 error_msg = "Could not parse any items or quantities from message."
+                logger.warning("[Ingestion Service - %s] LLM parsing yielded no items: %s", corr_id, error_msg)
                 staging_row.status = "Failed"
                 staging_row.error_message = error_msg
                 job.failed_rows = 1
@@ -82,7 +102,9 @@ class WhatsAppService:
                 db.commit()
                 return job
 
-            # 4. Match SKU Aliases and populate line items
+            logger.info("[Ingestion Service - %s] Parsed items: %s", corr_id, parsed_order.items)
+
+            # 4. Catalog Reconciliation
             line_items_to_create = []
             unmapped_items = []
 
@@ -95,26 +117,27 @@ class WhatsAppService:
                 product = db.execute(product_query).scalar_one_or_none()
 
                 if product:
+                    logger.info("[Ingestion Service - %s] Catalog matched: %s -> SKU %s", corr_id, item.raw_product_name, product.sku_id)
                     line_items_to_create.append({
                         "product_id": product.id,
                         "quantity": item.quantity,
                         "unit_price": product.base_price
                     })
                 else:
+                    logger.warning("[Ingestion Service - %s] Catalog unmatched: %s", corr_id, item.raw_product_name)
                     unmapped_items.append(item.raw_product_name)
 
-            # 5. Check if we had any unmapped SKUs
             if unmapped_items:
                 error_msg = f"Unmapped product aliases: {', '.join(unmapped_items)}"
+                logger.warning("[Ingestion Service - %s] Ingestion aborted due to unmapped products", corr_id)
                 staging_row.status = "Failed"
                 staging_row.error_message = error_msg
                 job.failed_rows = 1
                 job.status = "Completed"
                 db.commit()
-                logger.warning(f"WhatsApp order failed: {error_msg}")
                 return job
 
-            # 6. Commit to Canonical Order tables (Success path)
+            # 5. Order Creation & Ledger Persistence
             order = Order(
                 tenant_id=tenant_id,
                 internal_order_id=f"WA-{int(datetime.utcnow().timestamp())}",
@@ -143,8 +166,9 @@ class WhatsAppService:
                 to_status="Draft",
                 updated_by="system_whatsapp_agent",
                 metadata_json={
-                    "phone_number": phone_number,
-                    "raw_message": message_text
+                    "phone_number": normalized_phone,
+                    "raw_message": message_text,
+                    "correlation_id": corr_id
                 }
             )
             db.add(ledger)
@@ -155,12 +179,12 @@ class WhatsAppService:
             job.status = "Completed"
 
             db.commit()
-            logger.info(f"WhatsApp order created successfully: Order ID {order.id}")
+            logger.info("[Ingestion Service - %s] WhatsApp order created successfully: Order ID %s, internal_id: %s", corr_id, order.id, order.internal_order_id)
             return job
 
         except Exception as e:
             db.rollback()
-            logger.error(f"Error processing WhatsApp message: {e}", exc_info=True)
+            logger.error("[Ingestion Service - %s] Fatal exception processing message: %s", corr_id, e, exc_info=True)
             staging_row.status = "Failed"
             staging_row.error_message = f"Internal processing error: {str(e)}"
             job.failed_rows = 1
@@ -172,8 +196,9 @@ class WhatsAppService:
         """
         Simulates sending a WhatsApp message containing the 6-digit OTP code.
         """
+        normalized_num = normalize_phone_number(mobile_number)
         print(f"\n================== OUTGOING WHATSAPP OTP ==================")
-        print(f"To: {mobile_number}")
+        print(f"To: {normalized_num}")
         print(f"Message: Your verification code is: {otp_code}. Expires in 5 minutes.")
         print(f"===========================================================\n")
-        logger.info(f"WhatsApp OTP sent to {mobile_number}: {otp_code}")
+        logger.info(f"WhatsApp OTP sent to {normalized_num}: {otp_code}")

@@ -93,6 +93,7 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       
       const payload = {
+        tenant_id: activeTenantId,
         object: "whatsapp_business_account",
         entry: [
           {

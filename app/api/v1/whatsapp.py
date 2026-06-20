@@ -1,5 +1,6 @@
 import typing
 import uuid
+import logging
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -11,13 +12,17 @@ from app.models.product import Product, ProductAlias
 from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.tenant import DistributorTenant
 from app.services.gemini_service import GeminiService
+from app.services.whatsapp_adapter import adapt_to_canonical, CanonicalWhatsAppMessage
+from app.utils.phone import normalize_phone_number
+from app.services.tenant_service import DEMO_TENANT_ID
 
 router = APIRouter(prefix="/whatsapp", tags=["WhatsApp"])
 
-# Static Tenant ID fallback
-DEMO_TENANT_ID = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+logger = logging.getLogger("uvicorn.error")
 
 class WebhookPayload(BaseModel):
+    model_config = {"extra": "allow"}
+
     tenant_id: typing.Optional[uuid.UUID] = None
     phone_number: typing.Optional[str] = None
     sender_phone: typing.Optional[str] = None
@@ -31,37 +36,56 @@ def handle_whatsapp_webhook(
     payload: WebhookPayload,
     db: Session = Depends(get_db)
 ):
+    correlation_id = f"corr-{uuid.uuid4().hex[:8]}"
+    logger.info("[Ingestion - %s] Webhook payload received", correlation_id)
+    
     try:
-        # Normalize and resolve fallback values
-        msg_text = payload.message_text or payload.message or ""
-        phone = payload.sender_phone or payload.phone_number or payload.sender or ""
-        
+        # 1. Payload Adaptation Layer: transform incoming payload to Canonical internal model
+        canonical_msg = adapt_to_canonical(payload)
+        canonical_msg.correlation_id = correlation_id
+        logger.info(
+            "[Ingestion - %s] Payload adapted to Canonical Model: sender=%s, receiver=%s, text_length=%d",
+            correlation_id,
+            canonical_msg.sender_phone,
+            canonical_msg.receiver_phone,
+            len(canonical_msg.message_text)
+        )
+
+        msg_text = canonical_msg.message_text
+        phone = canonical_msg.sender_phone
+        receiver_phone = canonical_msg.receiver_phone
+
         # 1. Print the raw incoming message
         print("\n================== INCOMING RAW WHATSAPP MESSAGE ==================")
         print(f"Sender: {phone}")
         print(f"Message: {msg_text}")
+        print(f"Correlation ID: {correlation_id}")
         print("=====================================================================\n")
 
-        # Normalize message text for scanning
-        msg = msg_text.lower()
-        resolved_tenant_id = payload.tenant_id or DEMO_TENANT_ID
-        receiver_phone = payload.receiver
+        # 2. Tenant Resolution Layer
+        resolved_tenant_id = canonical_msg.tenant_id or DEMO_TENANT_ID
         if receiver_phone:
             tenant = db.query(DistributorTenant).filter(DistributorTenant.whatsapp_order_phone == receiver_phone).first()
             if tenant:
                 resolved_tenant_id = tenant.id
-
+        
+        logger.info("[Ingestion - %s] Resolved active Tenant ID: %s", correlation_id, resolved_tenant_id)
         tenant_context.set(resolved_tenant_id)
 
-        # 1. Dynamically parse customer attributes based on phone aliases (Layer 1 Whitelist)
+        # 3. Phone Number Normalization Layer
+        normalized_phone = normalize_phone_number(phone)
+        logger.info("[Ingestion - %s] Normalized sender phone: %s -> %s", correlation_id, phone, normalized_phone)
+
+        # 4. Customer Identification Layer (Layer 1 Whitelist)
         customer = None
-        if phone:
-            customer = db.query(Customer).join(CustomerAlias).filter(CustomerAlias.alias_value == phone).first()
+        if normalized_phone:
+            customer = db.query(Customer).join(CustomerAlias).filter(CustomerAlias.alias_value == normalized_phone).first()
             if not customer:
-                customer = db.query(Customer).filter(Customer.phone_number == phone).first()
+                customer = db.query(Customer).filter(Customer.phone_number == normalized_phone).first()
 
         if not customer:
-            print(f"Clean ignore: Sender {phone} is not whitelisted for tenant {resolved_tenant_id}")
+            logger.warning("[Ingestion - %s] Clean ignore: Sender %s is not whitelisted for tenant %s", correlation_id, normalized_phone, resolved_tenant_id)
+            print(f"Clean ignore: Sender {normalized_phone} is not whitelisted for tenant {resolved_tenant_id}")
             return {
                 "status": "ignored",
                 "message": "Sender not whitelisted or not found for this tenant.",
@@ -72,8 +96,9 @@ def handle_whatsapp_webhook(
             }
 
         customer_name = customer.retailer_name
+        logger.info("[Ingestion - %s] Customer resolved: %s (ID: %s)", correlation_id, customer_name, customer.id)
 
-        # 2. Parse unstructured text using Gemini Service or fall back to keyword logic
+        # 5. Core Ingestion Parser Layer (LLM Parsing)
         gemini_service = GeminiService()
         parsed_order = gemini_service.parse_order_text(msg_text)
 
@@ -85,8 +110,9 @@ def handle_whatsapp_webhook(
                     "qty": item.quantity
                 })
 
-        # Fallback multi-token detection if no items parsed dynamically
+        # Fallback keyword logic if LLM parsing yields no tokens
         if not raw_tokens:
+            msg = msg_text.lower()
             if "stayfree" in msg or "pad" in msg:
                 raw_tokens.append({"text_token": "Stayfree Sanitary Napkins (XL)", "qty": 10})
             if "maggi" in msg:
@@ -94,13 +120,10 @@ def handle_whatsapp_webhook(
             if "soap" in msg or "tata" in msg:
                 raw_tokens.append({"text_token": "Tata Premium Soap", "qty": 500})
             
-            # Fallback if absolutely no keywords matched
             if not raw_tokens:
                 raw_tokens.append({"text_token": "Wholesale SKU Ingestion", "qty": 100})
 
-        # 3. Match items against database catalog and populate parsed_items
-        parsed_items = []
-        has_unmatched = False
+        logger.info("[Ingestion - %s] Extracted order tokens: %s", correlation_id, raw_tokens)
 
         # Helper to get the best product from alias query results, avoiding MOCK products if possible
         def get_best_product_for_alias_query(query):
@@ -123,35 +146,30 @@ def handle_whatsapp_webhook(
                     return p
             return matches[0]
 
+        # Match tokens against database catalog
+        parsed_items = []
+        has_unmatched = False
+
         for token_entry in raw_tokens:
             token = token_entry["text_token"]
             qty = token_entry["qty"]
 
-            # Try finding the product in the database using case-insensitive match
-            # 1. Exact match on ProductAlias alias_name
+            # Match product case-insensitively
             product = get_best_product_for_alias_query(
                 db.query(ProductAlias).filter(ProductAlias.alias_name.ilike(token))
             )
-
-            # 2. Exact match on Product sku_id
             if not product:
                 product = get_best_product_for_prod_query(
                     db.query(Product).filter(Product.sku_id.ilike(token))
                 )
-
-            # 3. Partial match on ProductAlias
             if not product:
                 product = get_best_product_for_alias_query(
                     db.query(ProductAlias).filter(ProductAlias.alias_name.ilike(f"%{token}%"))
                 )
-
-            # 4. Partial match on Product sku_id
             if not product:
                 product = get_best_product_for_prod_query(
                     db.query(Product).filter(Product.sku_id.ilike(f"%{token}%"))
                 )
-
-            # 5. Reverse word overlap matching if still not found
             if not product:
                 words = [w.strip() for w in token.split() if len(w.strip()) > 2]
                 for w in words:
@@ -164,7 +182,7 @@ def handle_whatsapp_webhook(
                         break
 
             if product:
-                # Found State: Map parameters dynamically from the matching database row
+                logger.info("[Ingestion - %s] Product matched: %s -> SKU %s", correlation_id, token, product.sku_id)
                 parsed_items.append({
                     "product_name": token,
                     "sku_code": product.sku_id,
@@ -177,13 +195,13 @@ def handle_whatsapp_webhook(
                     "rate": float(product.base_price)
                 })
             else:
-                # Unmatched State: Assign parameters and flag unmatched
                 has_unmatched = True
+                logger.warning("[Ingestion - %s] Product unmatched: %s", correlation_id, token)
                 parsed_items.append({
                     "product_name": f"Unmatched: {token}",
                     "sku_code": "UNMATCHED_SKU",
                     "sku_id": "UNMATCHED_SKU",
-                    "brand": token,  # Save unmapped token string in brand to populate triage UI
+                    "brand": token,
                     "category": "Grocery",
                     "pack_size": "1 unit",
                     "qty": qty,
@@ -191,10 +209,8 @@ def handle_whatsapp_webhook(
                     "rate": 0.0
                 })
 
-        # 3. Create unique Parent Order ID string
+        # 6. Database Commit Layer / Order Creation
         generated_order_id = f"ORD-2506-{uuid.uuid4().hex[:4].upper()}"
-
-        # 4. Construct parent Order
         new_order = Order(
             id=uuid.uuid4(),
             tenant_id=resolved_tenant_id,
@@ -207,9 +223,8 @@ def handle_whatsapp_webhook(
         db.add(new_order)
         db.flush()
 
-        # 5. Loop through and write line item child records to DB
+        # Write line item child records to DB
         for item in parsed_items:
-            # Resolve product by SKU and Brand to ensure unique brand per unmatched token
             product = db.query(Product).filter_by(sku_id=item["sku_code"], brand=item["brand"]).first()
             if not product:
                 product = Product(
@@ -224,7 +239,6 @@ def handle_whatsapp_webhook(
                 db.add(product)
                 db.flush()
                 
-                # Add product alias as well
                 alias = ProductAlias(
                     id=uuid.uuid4(),
                     tenant_id=resolved_tenant_id,
@@ -234,7 +248,6 @@ def handle_whatsapp_webhook(
                 db.add(alias)
                 db.flush()
 
-            # Create OrderLineItem link
             db.add(OrderLineItem(
                 id=uuid.uuid4(),
                 tenant_id=resolved_tenant_id,
@@ -244,11 +257,10 @@ def handle_whatsapp_webhook(
                 unit_price=item["rate"]
             ))
 
-        # Parent State Conditionals
         order_status = "NEEDS_REVIEW" if has_unmatched else "Draft"
         new_order.status = order_status
 
-        # Record state transition (maps to Pending status in Recent Orders UI)
+        # Record state transition in ledger
         db.add(OrderStateLedger(
             tenant_id=resolved_tenant_id,
             order_id=new_order.id,
@@ -257,20 +269,16 @@ def handle_whatsapp_webhook(
             updated_by="system_whatsapp_agent"
         ))
 
-        # 2. Print the structured line items before committing
-        print("\n================== GENERATED STRUCTURED DATA ==================")
-        print(f"Assigned Customer: {customer_name}")
-        print(f"Generated Order ID: {generated_order_id}")
-        print(f"Parsed Items Array: {parsed_items}")
-        print("=====================================================================\n")
-
         db.commit()
         db.refresh(new_order)
 
-        # Aggregate total amount for logs
-        total_amount = sum(item["qty"] * item["rate"] for item in parsed_items)
-        print(f"Success! Persisted parsed text order for {customer_name} totaling {total_amount}")
-        
+        logger.info(
+            "[Ingestion - %s] Success! Order %s created totaling %s",
+            correlation_id,
+            generated_order_id,
+            sum(item["qty"] * item["rate"] for item in parsed_items)
+        )
+
         return {
             "status": "success",
             "order_id": generated_order_id,
@@ -283,5 +291,5 @@ def handle_whatsapp_webhook(
 
     except Exception as e:
         db.rollback()
-        print(f"Database Ingestion Failure: {str(e)}")
+        logger.error("[Ingestion - %s] Database write crash: %s", correlation_id, str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=f"Database write crash: {str(e)}")

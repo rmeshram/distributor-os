@@ -6,7 +6,8 @@ from app.database import get_db, tenant_context
 from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.product import Product
 from app.models.customer import Customer
-from app.api.v1.dashboard import ensure_demo_data, resolve_tenant_id
+from app.services.tenant_service import resolve_tenant_id
+from app.services.demo_service import ensure_demo_data
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
