@@ -13,14 +13,24 @@ import { useDashboardData } from "@/hooks/useDashboardData";
 import { ChevronDown, SlidersHorizontal, RefreshCw, CheckCircle2, AlertCircle, X, Inbox } from "lucide-react";
 import WhatsAppSimulator from "@/components/WhatsAppSimulator";
 
-// Reusable micro-component to protect child components when data arrays are empty
-const InlineCardEmptyState = ({ title, description }: { title: string; description: string }) => (
-  <div className="flex flex-col items-center justify-center h-full w-full bg-white rounded-xl p-6 text-center border border-slate-100">
-    <div className="w-9 h-9 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 mb-2 border border-slate-100">
-      <Inbox className="w-4 h-4" />
-    </div>
-    <h4 className="text-xs font-bold text-slate-700">{title}</h4>
-    <p className="text-[11px] text-slate-400 max-w-[220px] mt-1 leading-normal">{description}</p>
+// Isolated inline fallback state builder to keep layouts visually bounded and clean
+const CardPanelFallback = ({ title, description, isLoading }: { title: string; description: string; isLoading?: boolean }) => (
+  <div className="flex flex-col items-center justify-center h-full w-full bg-white rounded-xl p-6 text-center border border-dashboard-border shadow-sm min-h-[250px]">
+    {isLoading ? (
+      <div className="flex flex-col items-center gap-2.5 w-full animate-pulse px-2">
+        <div className="h-5 bg-slate-100 rounded w-1/3 mb-2" />
+        <div className="h-4 bg-slate-100 rounded w-full" />
+        <div className="h-4 bg-slate-50 rounded w-5/6" />
+      </div>
+    ) : (
+      <>
+        <div className="w-9 h-9 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 mb-2 border border-slate-100">
+          <Inbox className="w-4 h-4" />
+        </div>
+        <h4 className="text-xs font-bold text-slate-700">{title}</h4>
+        <p className="text-[11px] text-slate-400 max-w-[240px] mt-1 leading-normal">{description}</p>
+      </>
+    )}
   </div>
 );
 
@@ -153,7 +163,7 @@ export default function DashboardPage() {
     closeDetails,
     refreshAll,
     error,
-    isLoading
+    isLoading // Extracted loading identifier safely from data lifecycle hook context
   } = useDashboardData(isHydrating ? "" : tenantId, startDate, endDate);
 
   if (!tenantId || tenantId === "") {
@@ -166,13 +176,16 @@ export default function DashboardPage() {
 
   return (
     <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
+      {/* 1. Left Sidebar */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         tenantName={getTenantName()}
       />
 
+      {/* Main Workspace Frame */}
       <div className="flex-1 pl-64 flex flex-col h-screen overflow-hidden">
+        {/* 2. Top Header */}
         <DashboardHeader
           activeTenantId={tenantId}
           setActiveTenantId={handleTenantChange}
@@ -180,6 +193,7 @@ export default function DashboardPage() {
           userProfile={userProfile}
         />
 
+        {/* 3. Dashboard Scrollable Content */}
         <main className="flex-1 mt-16 p-6 overflow-y-auto space-y-6">
           {isHydrating ? (
             <div className="flex flex-col items-center justify-center py-32 gap-3 bg-white rounded-xl border border-dashboard-border shadow-sm h-[400px]">
@@ -188,13 +202,14 @@ export default function DashboardPage() {
             </div>
           ) : (
             <>
-              {/* Controls and Header Remain Unaltered and Viewable */}
+              {/* Dashboard Control Header with layout settings retained */}
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-xl font-bold text-slate-800 tracking-tight">Dashboard</h1>
                   <p className="text-xs text-slate-400 font-semibold mt-0.5">Real-time operational workflow management</p>
                 </div>
                 
+                {/* Date Picker & Action Controls */}
                 <div className="flex items-center gap-3">
                   {error && (
                     <button
@@ -207,6 +222,7 @@ export default function DashboardPage() {
                     </button>
                   )}
 
+                  {/* Unified Timeframe Selector */}
                   <div className="flex items-center gap-2">
                     <label className="text-xs font-semibold text-slate-500">Timeframe:</label>
                     <select 
@@ -246,29 +262,29 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   )}
+
+                  {/* FEATURE PRESERVATION: Customize Layout Button */}
+                  <button className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Customize</span>
+                  </button>
                 </div>
               </div>
 
-              {/* A. Core Operational Metrics Row - Displays zero states cleanly */}
+              {/* A. Core Operational Metrics Row - Safely defaults to standard 0 frames */}
               <MetricCards metrics={metrics} />
 
-              {/* B. Split Middle Pane - Row 2 */}
+              {/* B. Split Middle Pane (Recent Orders vs Collections Aging Donut) */}
               <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                 
-                {/* Left Col: Recent Orders Card Frame */}
-                <div className="lg:col-span-3 h-[340px]">
+                {/* Left Col: Recent Orders Table Component Panel */}
+                <div className="lg:col-span-3 min-h-[380px]">
                   {isLoading ? (
-                    <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-full justify-between">
-                      <div className="h-6 bg-slate-100 rounded animate-pulse w-32" />
-                      <div className="flex-1 space-y-4 my-2">
-                        <div className="h-5 bg-slate-100 rounded w-full animate-pulse" />
-                        <div className="h-5 bg-slate-50 rounded w-full animate-pulse" />
-                      </div>
-                    </div>
+                    <CardPanelFallback title="" description="" isLoading />
                   ) : !recentOrders || recentOrders.length === 0 ? (
-                    <InlineCardEmptyState 
-                      title="No Recent Orders Found" 
-                      description="WhatsApp incoming order receipts or structured catalog checkout text pipelines haven't logged entries yet."
+                    <CardPanelFallback 
+                      title="No Live Orders Registered" 
+                      description="Transcribed WhatsApp digital vouchers or catalog requests will populate live rows here once received."
                     />
                   ) : (
                     <RecentOrders
@@ -285,17 +301,14 @@ export default function DashboardPage() {
                   )}
                 </div>
 
-                {/* Right Col: Collections Donut Card Frame */}
-                <div className="lg:col-span-2 h-[340px]">
+                {/* Right Col: Collections Donut Chart Component Panel */}
+                <div className="lg:col-span-2 min-h-[380px]">
                   {isLoading ? (
-                    <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-full justify-between">
-                      <div className="h-6 bg-slate-100 rounded animate-pulse w-40" />
-                      <div className="w-28 h-28 rounded-full border-8 border-slate-100 mx-auto animate-pulse" />
-                    </div>
+                    <CardPanelFallback title="" description="" isLoading />
                   ) : !donutData || donutData.length === 0 ? (
-                    <InlineCardEmptyState 
-                      title="No Outstanding Balance Records" 
-                      description="Payment aging charts ledger data splits will construct once ledger invoices populate outstanding summaries."
+                    <CardPanelFallback 
+                      title="No Outstanding Ledgers" 
+                      description="Outstanding balance analytics distribution arcs will map out as soon as active invoices show pending status."
                     />
                   ) : (
                     <CollectionsDonut
@@ -307,67 +320,61 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* C. Operations Row 3 */}
-              <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                <div className="lg:col-span-3 h-[280px]">
+              {/* C. FEATURE PRESERVATION: Modern Bottom Operational Grid (3 Columns) */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                {/* Grid Item 1: Live Driver Deliveries Tracking */}
+                <div className="min-h-[300px]">
                   {isLoading ? (
-                    <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-full justify-between">
-                      <div className="h-4 bg-slate-100 rounded w-24 animate-pulse" />
-                    </div>
+                    <CardPanelFallback title="" description="" isLoading />
+                  ) : (
+                    <LiveDeliveries viewAllHref="/dashboard/shipments" />
+                  )}
+                </div>
+
+                {/* Grid Item 2: Erp Connected Inventory Stock Summary */}
+                <div className="min-h-[300px]">
+                  {isLoading ? (
+                    <CardPanelFallback title="" description="" isLoading />
                   ) : !metrics ? (
-                    <InlineCardEmptyState 
-                      title="Inventory Analytics Unavailable" 
-                      description="Connect a read-only database tracking anchor or ERP integration node to read live ledger distributions."
+                    <CardPanelFallback 
+                      title="Inventory Summary Unavailable" 
+                      description="Connect your warehouse product catalogue mapping parameters to synchronize current ledger stock."
                     />
                   ) : (
                     <InventorySummary data={metrics} />
                   )}
                 </div>
 
-                {/* Coming Soon Feature Card Block Frame */}
-                <div className="lg:col-span-2 relative border border-slate-100 rounded-2xl p-6 bg-white overflow-hidden h-[280px]">
-                  <div className="absolute inset-0 bg-slate-50/60 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center text-center p-4">
-                    <span className="bg-blue-50 text-blue-700 text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full mb-2 shadow-sm border border-blue-100">
-                      Coming Soon
-                    </span>
-                    <p className="text-xs font-bold text-slate-700">Real-Time Driver GPS Tracking</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5 max-w-[200px]">Lightweight PWA driver location tracking rails are under development.</p>
-                  </div>
-                  <div className="opacity-25 pointer-events-none h-full">
-                    <LiveDeliveries viewAllHref="/dashboard/shipments" />
-                  </div>
+                {/* Grid Item 3: Live System Activity Webhook Feed */}
+                <div className="min-h-[300px]">
+                  {isLoading ? (
+                    <CardPanelFallback title="" description="" isLoading />
+                  ) : !activities || activities.length === 0 ? (
+                    <div className="h-full bg-white border border-dashboard-border rounded-xl p-6 flex items-center justify-center text-center text-xs font-semibold text-slate-400 shadow-sm">
+                      No webhook logging events tracked within chosen limits.
+                    </div>
+                  ) : (
+                    <ActivityFeed activities={activities} viewAllHref="/dashboard/reports" />
+                  )}
                 </div>
-              </div>
-
-              {/* D. Audit Log Row 4 */}
-              <div className="w-full">
-                {isLoading ? (
-                  <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm">
-                    <div className="h-5 bg-slate-100 rounded w-full animate-pulse" />
-                  </div>
-                ) : !activities || activities.length === 0 ? (
-                  <div className="bg-white border border-slate-100 rounded-xl p-8 text-center text-xs font-semibold text-slate-400">
-                    No active internal webhook system audit logging items mapped yet.
-                  </div>
-                ) : (
-                  <ActivityFeed activities={activities} viewAllHref="/dashboard/reports" />
-                )}
               </div>
             </>
           )}
         </main>
       </div>
 
+      {/* WhatsApp Ingestion Simulator Overlay */}
       <WhatsAppSimulator activeTenantId={tenantId} onSuccess={refreshAll} />
 
       {/* Floating System Toast Alerts */}
       {toast.show && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 backdrop-blur-md border border-slate-100 shadow-2xl px-4 py-3.5 rounded-xl pointer-events-auto max-w-sm">
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 backdrop-blur-md border border-slate-100 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
           <div className="flex-1 min-w-0">
             <p className="text-xs font-bold text-slate-800">{toast.type === "success" ? "Success" : "Error"}</p>
             <p className="text-[11px] text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
           </div>
-          <button onClick={() => setToast(prev => ({ ...prev, show: false }))} className="text-slate-400 hover:text-slate-600">
+          <button onClick={() => setToast(prev => ({ ...prev, show: false }))} className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
