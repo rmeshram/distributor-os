@@ -133,8 +133,7 @@ def list_customers(
             "payment_terms": customer.payment_terms if customer.payment_terms else "Net 30",
             "credit_limit": float(customer.credit_limit) if customer.credit_limit else 0.0,
             "outstanding_balance": float(customer.outstanding_balance) if customer.outstanding_balance else 0.0,
-            # Explicitly forwards the true column state fields to the UI layer
-            "phone": customer.phone_number if customer.phone_number else "N/A"
+            "phone": customer.phone_number if customer.phone_number else (customer.aliases[0].alias_value if customer.aliases else "N/A")
         })
         
     return response_payload
