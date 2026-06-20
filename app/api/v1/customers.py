@@ -8,7 +8,6 @@ from app.models.customer import Customer, CustomerAlias
 from app.models.ledger import CustomerLedger
 from app.api.v1.dashboard import ensure_demo_data
 
-
 router = APIRouter(prefix="/customers", tags=["Customers"])
 
 class CustomerUpdatePayload(BaseModel):
@@ -59,7 +58,8 @@ def onboard_customer(
     db: Session = Depends(get_db)
 ):
     """
-    Onboards a new B2B customer (retailer) and binds their contact phone number alias.
+    Onboards a new B2B customer (retailer), populates their main profile contact path,
+    and binds their contact phone number alias safely for multi-tenant protection layers.
     """
     tenant_context.set(tenant_id)
     
@@ -83,7 +83,9 @@ def onboard_customer(
         tax_group="GST-18",
         payment_terms=payload.billing_terms,
         credit_limit=payload.credit_limit,
-        outstanding_balance=0.0
+        outstanding_balance=0.0,
+        # FIXED: Directly stores phone information during ingestion lifecycle
+        phone_number=payload.contact_number
     )
     db.add(new_cust)
     db.flush()
@@ -105,6 +107,41 @@ def onboard_customer(
         "retailer_name": new_cust.retailer_name,
         "contact_number": new_alias.alias_value
     }
+
+
+# FIXED: Added missing live query selection route mapping logic
+@router.get("", status_code=status.HTTP_200_OK)
+def list_customers(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Fetches real customer profiles synchronized from active workspace tenant data maps.
+    """
+    tenant_context.set(tenant_id)
+    ensure_demo_data(db, tenant_id) # Safe demo population fallback alignment execution pass
+    
+    records = db.query(Customer).filter(Customer.tenant_id == tenant_id).all()
+    
+    response_payload = []
+    for customer in records:
+        response_payload.append({
+            "id": str(customer.id),
+            "customer_id": customer.customer_id,
+            "retailer_name": customer.retailer_name,
+            "address_text": customer.address_text if customer.address_text else "N/A",
+            "gstin": customer.gstin if customer.gstin else "PENDING",
+            "tax_group": customer.tax_group if customer.tax_group else "GST-18",
+            "payment_terms": customer.payment_terms if customer.payment_terms else "Net 30",
+            "credit_limit": float(customer.credit_limit) if customer.credit_limit else 0.0,
+            "outstanding_balance": float(customer.outstanding_balance) if customer.outstanding_balance else 0.0,
+            # FIELD FORMAT UNIFICATION MARSHALING:
+            # Resolves parameters seamlessly so both simulator dropdowns and tables bind to active properties
+            "phone": customer.phone_number if customer.phone_number else "N/A"
+        })
+        
+    return response_payload
+
 
 @router.get("/{customer_id}/statement")
 def get_customer_statement(
@@ -152,4 +189,3 @@ def get_customer_statement(
         "running_balance": running_balance,
         "statement": statement
     }
-
