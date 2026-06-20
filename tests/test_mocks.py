@@ -13,8 +13,12 @@ from app.services.integration_service import IntegrationService
 from app.database import tenant_context
 import httpx
 
+from app.api.v1.mocks import router as mocks_router
+
 @pytest.fixture(name="api_client")
 def fixture_api_client():
+    # Dynamically mount mocks_router for test execution isolation
+    app.include_router(mocks_router, prefix="/api/v1")
     return TestClient(app)
 
 def test_tally_inventory_sync(db_session, api_client, monkeypatch):

@@ -7,7 +7,7 @@ interface Customer {
   id: string;
   customer_id: string;
   retailer_name: string;
-  phone_number: string;
+  phone: string;
   tenant_id: string;
 }
 
@@ -79,7 +79,7 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
       const match = customers.find((c) => c.id === id);
       if (match) {
         setCustomName(match.retailer_name);
-        setCustomPhone(match.phone_number || "");
+        setCustomPhone(match.phone || "");
       }
     }
   };
@@ -173,7 +173,7 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
                 ) : (
                   customers.map((customer) => (
                     <option key={customer.id} value={customer.id}>
-                      👤 {customer.retailer_name} ({customer.phone_number || "No Phone Number Specified"})
+                      👤 {customer.retailer_name} ({customer.phone || "No Phone Number Specified"})
                     </option>
                   ))
                 )}
