@@ -249,4 +249,46 @@ def test_conversational_invoice_preference_extraction(db_session, setup_test_cat
             break
     assert gst_order is not None
 
+    # Setup / Webhook call for GST_TAX_INVOICE via "Company ka bill"
+    response = client.post("/api/v1/whatsapp/webhook", json={
+        "tenant_id": "d3b07384-d113-4956-a5d2-64be7357c11d",
+        "phone_number": "9999888877",
+        "message_text": "Stayfree 100 boxes, Company ka bill bhej dena"
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+
+    orders = db_session.query(Order).filter(
+        Order.tenant_id == uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+    ).order_by(Order.created_at.desc()).all()
+
+    company_bill_order = None
+    for o in orders:
+        if o.invoice_type == "GST_TAX_INVOICE":
+            company_bill_order = o
+            break
+    assert company_bill_order is not None
+
+    # Setup / Webhook call for GST_TAX_INVOICE via "GST number"
+    response = client.post("/api/v1/whatsapp/webhook", json={
+        "tenant_id": "d3b07384-d113-4956-a5d2-64be7357c11d",
+        "phone_number": "9999888877",
+        "message_text": "Maggi 50 cases, standard GST number bill lagana"
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+
+    orders = db_session.query(Order).filter(
+        Order.tenant_id == uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+    ).order_by(Order.created_at.desc()).all()
+
+    gst_num_order = None
+    for o in orders:
+        if o.invoice_type == "GST_TAX_INVOICE":
+            gst_num_order = o
+            break
+    assert gst_num_order is not None
+
 

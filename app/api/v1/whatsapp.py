@@ -100,6 +100,7 @@ def handle_whatsapp_webhook(
         # 5. Core Ingestion Parser Layer (LLM Parsing)
         gemini_service = GeminiService()
         parsed_order = gemini_service.parse_order_text(msg_text)
+        logger.info(f"WHATSAPP_INGEST_DIAGNOSTIC: text='{msg_text}' parsed_result={parsed_order.model_dump_json()}")
 
         raw_tokens = []
         if parsed_order.items:

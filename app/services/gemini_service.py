@@ -51,7 +51,7 @@ class GeminiService:
                     "Parse the following order message written in English, Hindi, or Hinglish. "
                     "Extract each product name (including brand if mentioned) and its quantity. "
                     "Also, scan colloquial business language phrases to classify the invoice preference:\n"
-                    "- If the message contains expressions like 'GST lagana', 'tax invoice', 'GST bill', 'with tax', set extracted_invoice_preference to 'GST_TAX_INVOICE'.\n"
+                    "- If the message contains expressions like 'GST lagana', 'tax invoice', 'GST bill', 'with tax', 'Company ka bill', 'GST number', set extracted_invoice_preference to 'GST_TAX_INVOICE'.\n"
                     "- If the message contains expressions like 'normal bill', 'cash bill', 'bina tax', 'kachha bill', 'bina GST', 'kachha', set extracted_invoice_preference to 'RETAIL_CASH_INVOICE'.\n"
                     "- If no specific invoice preference is requested, set extracted_invoice_preference to 'UNSPECIFIED'.\n"
                     "Return the data strictly as JSON matching the schema."
@@ -86,7 +86,7 @@ class GeminiService:
         extracted_pref = "UNSPECIFIED"
         if "normal bill" in normalized or "cash bill" in normalized or "bina tax" in normalized or "kachha bill" in normalized or "kachha" in normalized or "bina gst" in normalized:
             extracted_pref = "RETAIL_CASH_INVOICE"
-        elif "gst lagana" in normalized or "tax invoice" in normalized or "gst bill" in normalized or "gst invoice" in normalized or "tax bill" in normalized:
+        elif "gst lagana" in normalized or "tax invoice" in normalized or "gst bill" in normalized or "gst invoice" in normalized or "tax bill" in normalized or "company ka bill" in normalized or "gst number" in normalized:
             extracted_pref = "GST_TAX_INVOICE"
 
         # Check hardcoded test match patterns first for predictable test behavior
