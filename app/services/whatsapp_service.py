@@ -10,7 +10,7 @@ from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.services.gemini_service import GeminiService
 from app.database import tenant_context
 from app.services.whatsapp_adapter import CanonicalWhatsAppMessage
-from app.utils.phone import normalize_phone_number
+from app.utils.phone import normalize_phone_number, get_phone_number_variants
 
 logger = logging.getLogger(__name__)
 
@@ -68,14 +68,22 @@ class WhatsAppService:
         try:
             # 2. Phone Number Normalization & Customer Alias Match
             normalized_phone = normalize_phone_number(phone_number)
-            logger.info("[Ingestion Service - %s] Normalized sender phone: %s -> %s", corr_id, phone_number, normalized_phone)
+            phone_variants = get_phone_number_variants(phone_number)
+            logger.info("[Ingestion Service - %s] Normalized sender phone: %s -> %s, variants: %s", corr_id, phone_number, normalized_phone, phone_variants)
 
             customer_query = (
                 select(Customer)
                 .join(CustomerAlias)
-                .where(CustomerAlias.alias_value == normalized_phone)
+                .where(CustomerAlias.alias_value.in_(phone_variants))
             )
             customer = db.execute(customer_query).scalar_one_or_none()
+
+            if not customer:
+                customer_query = (
+                    select(Customer)
+                    .where(Customer.phone_number.in_(phone_variants))
+                )
+                customer = db.execute(customer_query).scalar_one_or_none()
 
             if not customer:
                 error_msg = f"Unknown customer phone number: {normalized_phone}"

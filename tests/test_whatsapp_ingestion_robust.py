@@ -186,3 +186,22 @@ def test_webhook_nested_simulator_ingestion(db_session, setup_test_catalog):
     recent_list = dashboard_resp.json()
     assert len(recent_list) > 0
     assert any(o["order_id"] == order.internal_order_id for o in recent_list)
+
+
+def test_phone_variants_matching(db_session, setup_test_catalog):
+    # 1. Verify get_phone_number_variants outputs correctly
+    from app.utils.phone import get_phone_number_variants
+    assert "9999111122" in get_phone_number_variants("+919999111122")
+    assert "919999111122" in get_phone_number_variants("+919999111122")
+    assert "+919999111122" in get_phone_number_variants("9999111122")
+
+    # 2. Verify that a webhook call with a raw 10-digit number matches Kaveri Provision Store (alias "+919999888877")
+    response = client.post("/api/v1/whatsapp/webhook", json={
+        "tenant_id": "d3b07384-d113-4956-a5d2-64be7357c11d",
+        "phone_number": "9999888877",  # Send 10 digits
+        "message_text": "Bhaiya, send 10 cases of PatanjaliDantKanti"
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+

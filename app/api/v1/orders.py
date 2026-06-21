@@ -287,7 +287,7 @@ def resolve_order_item(
     has_remaining_unmatched = False
     for i in all_items:
         prod = db.get(Product, i.product_id)
-        if prod and prod.sku_id == "UNMATCHED_SKU":
+        if prod and prod.sku_id in ("UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU"):
             has_remaining_unmatched = True
             break
 

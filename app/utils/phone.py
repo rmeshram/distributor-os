@@ -22,3 +22,39 @@ def normalize_phone_number(phone_str: str) -> str:
     if phone_str.startswith("+") or not digits:
         return f"+{digits}" if digits else ""
     return f"+{digits}"
+
+
+def get_phone_number_variants(phone_str: str) -> list[str]:
+    """
+    Generates potential string representation variants of a phone number:
+    - E.164 normalized: +91XXXXXXXXXX
+    - Stripped leading '+': 91XXXXXXXXXX
+    - 10-digit suffix: XXXXXXXXXX
+    - Original input string (stripped)
+    """
+    if not phone_str:
+        return []
+    
+    normalized = normalize_phone_number(phone_str)
+    if not normalized:
+        return []
+        
+    variants = {normalized}
+    
+    # Strip leading '+'
+    stripped = normalized.lstrip("+")
+    variants.add(stripped)
+    
+    # Only keep digits
+    digits = re.sub(r"\D", "", normalized)
+    if digits:
+        variants.add(digits)
+        # 10 digit suffix if applicable
+        if len(digits) >= 10:
+            variants.add(digits[-10:])
+            
+    # Also add original phone_str
+    variants.add(phone_str.strip())
+    
+    return sorted(list(variants))
+

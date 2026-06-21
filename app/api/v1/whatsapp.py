@@ -13,7 +13,7 @@ from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.tenant import DistributorTenant
 from app.services.gemini_service import GeminiService
 from app.services.whatsapp_adapter import adapt_to_canonical, CanonicalWhatsAppMessage
-from app.utils.phone import normalize_phone_number
+from app.utils.phone import normalize_phone_number, get_phone_number_variants
 from app.services.tenant_service import DEMO_TENANT_ID
 
 router = APIRouter(prefix="/whatsapp", tags=["WhatsApp"])
@@ -72,44 +72,22 @@ def handle_whatsapp_webhook(
         logger.info("[Ingestion - %s] Resolved active Tenant ID: %s", correlation_id, resolved_tenant_id)
         tenant_context.set(resolved_tenant_id)
 
-     # ====================================================================
-        # REPLACED: #3 (Normalization Layer) & #4 (Customer Identification Layer)
-        # Suffix matching logic removes prefix bugs (+91, 91, trailing blanks)
-        # ====================================================================
+        # 3. Phone Number Normalization Layer
         normalized_phone = normalize_phone_number(phone)
         logger.info("[Ingestion - %s] Normalized sender phone: %s -> %s", correlation_id, phone, normalized_phone)
 
+        # 4. Customer Identification Layer (Layer 1 Whitelist)
         customer = None
-        if normalized_phone:
-            # Isolate only the core trailing 10 numeric digits to prevent prefix drops
-            phone_suffix = "".join(filter(str.isdigit, normalized_phone))[-10:]
-            logger.info("[Ingestion - %s] Isolated trailing 10 digits for query matching: %s", correlation_id, phone_suffix)
-
-            # Suffix lookup query against Customer Aliases tracking table
-            customer = (
-                db.query(Customer)
-                .join(CustomerAlias)
-                .filter(
-                    Customer.tenant_id == resolved_tenant_id,
-                    CustomerAlias.alias_value.like(f"%{phone_suffix}")
-                )
-                .first()
-            )
-            
-            # Suffix look up fallback query against root Customer profile table
+        if phone:
+            phone_variants = get_phone_number_variants(phone)
+            logger.info("[Ingestion - %s] Generated phone variants for lookup: %s", correlation_id, phone_variants)
+            customer = db.query(Customer).join(CustomerAlias).filter(CustomerAlias.alias_value.in_(phone_variants)).first()
             if not customer:
-                customer = (
-                    db.query(Customer)
-                    .filter(
-                        Customer.tenant_id == resolved_tenant_id,
-                        Customer.phone_number.like(f"%{phone_suffix}")
-                    )
-                    .first()
-                )
+                customer = db.query(Customer).filter(Customer.phone_number.in_(phone_variants)).first()
 
         if not customer:
-            logger.warning("[Ingestion - %s] Clean ignore: Sender suffix ending in '%s' not found for tenant %s", correlation_id, phone, resolved_tenant_id)
-            print(f"Clean ignore: Sender suffix for {phone} is not whitelisted for tenant {resolved_tenant_id}")
+            logger.warning("[Ingestion - %s] Clean ignore: Sender %s is not whitelisted for tenant %s", correlation_id, normalized_phone, resolved_tenant_id)
+            print(f"Clean ignore: Sender {normalized_phone} is not whitelisted for tenant {resolved_tenant_id}")
             return {
                 "status": "ignored",
                 "message": "Sender not whitelisted or not found for this tenant.",
@@ -118,7 +96,6 @@ def handle_whatsapp_webhook(
                 "failed_rows": 0,
                 "error_message": None
             }
-        # ====================================================================
 
         # 5. Core Ingestion Parser Layer (LLM Parsing)
         gemini_service = GeminiService()
@@ -247,28 +224,43 @@ def handle_whatsapp_webhook(
 
         # Write line item child records to DB
         for item in parsed_items:
-            product = db.query(Product).filter_by(sku_id=item["sku_code"], brand=item["brand"]).first()
-            if not product:
-                product = Product(
-                    id=uuid.uuid4(),
-                    tenant_id=resolved_tenant_id,
-                    sku_id=item["sku_code"],
-                    brand=item["brand"],
-                    category=item["category"],
-                    pack_size=item["pack_size"],
-                    base_price=item["rate"]
-                )
-                db.add(product)
-                db.flush()
-                
-                alias = ProductAlias(
-                    id=uuid.uuid4(),
-                    tenant_id=resolved_tenant_id,
-                    product_id=product.id,
-                    alias_name=item["product_name"]
-                )
-                db.add(alias)
-                db.flush()
+            if item["sku_code"] == "UNMATCHED_SKU":
+                product = db.query(Product).filter_by(sku_id="UNMATCHED_TRIAGE_SKU", tenant_id=resolved_tenant_id).first()
+                if not product:
+                    product = Product(
+                        id=uuid.uuid4(),
+                        tenant_id=resolved_tenant_id,
+                        sku_id="UNMATCHED_TRIAGE_SKU",
+                        brand="System Triage",
+                        category="Triage",
+                        pack_size="1 Unit",
+                        base_price=0.0
+                    )
+                    db.add(product)
+                    db.flush()
+            else:
+                product = db.query(Product).filter_by(sku_id=item["sku_code"], brand=item["brand"]).first()
+                if not product:
+                    product = Product(
+                        id=uuid.uuid4(),
+                        tenant_id=resolved_tenant_id,
+                        sku_id=item["sku_code"],
+                        brand=item["brand"],
+                        category=item["category"],
+                        pack_size=item["pack_size"],
+                        base_price=item["rate"]
+                    )
+                    db.add(product)
+                    db.flush()
+                    
+                    alias = ProductAlias(
+                        id=uuid.uuid4(),
+                        tenant_id=resolved_tenant_id,
+                        product_id=product.id,
+                        alias_name=item["product_name"]
+                    )
+                    db.add(alias)
+                    db.flush()
 
             db.add(OrderLineItem(
                 id=uuid.uuid4(),

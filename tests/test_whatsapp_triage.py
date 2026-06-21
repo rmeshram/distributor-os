@@ -63,5 +63,5 @@ def test_whatsapp_webhook_triage_flow(db_session, client):
     unmatched_item = line_items[0]
     prod = db_session.get(Product, unmatched_item.product_id)
     assert prod is not None
-    assert prod.sku_id == "UNMATCHED_SKU"
-    assert prod.brand == "PatanjaliDantKanti"
+    assert prod.sku_id == "UNMATCHED_TRIAGE_SKU"
+    assert prod.brand == "System Triage"
