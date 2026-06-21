@@ -138,7 +138,7 @@ def get_products(
     """
     ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
-    products = db.query(Product).all()
+    products = db.query(Product).filter(Product.sku_id != "UNMATCHED_TRIAGE_SKU").all()
     return [
         {
             "id": str(p.id),
@@ -162,7 +162,7 @@ def get_inventory_items(
     """
     ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
-    items = db.query(Product, Inventory).outerjoin(Inventory, Product.id == Inventory.sku_id).filter(Product.tenant_id == tenant_id).all()
+    items = db.query(Product, Inventory).outerjoin(Inventory, Product.id == Inventory.sku_id).filter(Product.tenant_id == tenant_id, Product.sku_id != "UNMATCHED_TRIAGE_SKU").all()
     return [
         {
             "id": str(p.id),
