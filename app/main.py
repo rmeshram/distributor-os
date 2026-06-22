@@ -19,9 +19,12 @@ allowed_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
+
 env_origins = os.getenv("ALLOWED_ORIGINS")
 if env_origins:
-    allowed_origins = [orig.strip() for orig in env_origins.split(",") if orig.strip()]
+    # Use .extend() to ADD to the list, instead of overwriting it!
+    env_list = [orig.strip() for orig in env_origins.split(",") if orig.strip()]
+    allowed_origins.extend(env_list)
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,6 +33,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 app.include_router(api_router, prefix="/api/v1")
 
