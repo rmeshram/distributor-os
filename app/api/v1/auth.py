@@ -160,11 +160,10 @@ def firebase_login(
     # Step 2: Extract trailing 10 digits to normalize against varying country prefixes
     clean_10_digits = phone_number[-10:] if phone_number else ""
 
-    # Look up user dynamically by matching trailing digits or explicit firebase_uid
     user = db.query(User).filter(
-        (User.phone_number.like(f"%{clean_10_digits}"))
-        | (User.email_or_phone.like(f"%{clean_10_digits}"))
-        | (User.firebase_uid == uid)
+        (User.firebase_uid == uid) | 
+        (User.phone_number == clean_10_digits) | 
+        (User.email_or_phone == clean_10_digits)
     ).first()
 
     # Step 3: New user path — Return signup token to advance to company registration
