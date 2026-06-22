@@ -79,6 +79,8 @@ def _get_firebase_app():
         logger.info("Initializing Firebase from JSON string environment variable.")
         try:
             cred_dict = json.loads(cred_json)
+            if "private_key" in cred_dict:
+                cred_dict["private_key"] = cred_dict["private_key"].replace("\\n", "\n")
             cred = fb_credentials.Certificate(cred_dict)
         except json.JSONDecodeError as exc:
             raise RuntimeError(f"FIREBASE_CREDENTIALS_JSON is not valid JSON: {exc}") from exc
