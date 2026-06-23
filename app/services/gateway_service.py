@@ -44,37 +44,23 @@ class EvolutionGatewayService:
                 logger.error("Unexpected error during instance initialization: url=%s, payload=%s, error=%s", url, payload, str(exc))
                 raise
 
-  async def generate_qr_code(self, instance_name: str) -> str:
-        # Step 1: Ensure it's initialized (prevents 400/404 errors)
-        init_url = f"{self.base_url}/instance/initialize/{instance_name}"
+ async def generate_qr_code(self, instance_name: str) -> str:
+        url = f"{self.base_url}/instance/connect/{instance_name}"
+        logger.info("Attempting to connect instance: %s", url)
         
         async with httpx.AsyncClient() as client:
-            # 1. Initialize
-            await client.post(init_url, headers=self._get_headers())
-            
-            # 2. Connect to get the QR code
-            conn_url = f"{self.base_url}/instance/connect/{instance_name}"
-            logger.info("Connecting to instance: url=%s", conn_url)
-            
-            response = await client.post(conn_url, headers=self._get_headers())
-            
-            if response.status_code != 200:
-                logger.error("QR generation failed: %s", response.text)
-                response.raise_for_status()
+            try:
+                response = await client.post(url, headers=self._get_headers())
+                # LOG THE FULL RESPONSE BEFORE DOING ANYTHING ELSE
+                logger.info("Gateway raw response: %s", response.text)
                 
-            data = response.json()
-            
-            # Extract base64 safely
-            # Note: Sometimes it's in data['qrcode']['base64'], sometimes just data['base64']
-            base64_str = data.get("base64") or (data.get("qrcode") or {}).get("base64")
-            
-            if not base64_str:
-                # If it's already 'open', it won't return a QR code. Return a status message.
-                if data.get("instance", {}).get("connectionStatus") == "open":
-                    return "ALREADY_CONNECTED"
-                raise RuntimeError("No QR code found in response.")
-            
-            return base64_str
+                response.raise_for_status() # This will raise an HTTPError for non-200s
+                
+                data = response.json()
+                # ... (rest of your logic)
+            except httpx.HTTPStatusError as exc:
+                logger.error("HTTP error: %s. Response: %s", str(exc), exc.response.text)
+                raise
 
     async def configure_webhook(self, instance_name: str) -> dict:
         url = f"{self.base_url}/webhook/set/{instance_name}"
