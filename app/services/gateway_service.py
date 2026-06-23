@@ -45,22 +45,42 @@ class EvolutionGatewayService:
                 raise
 
  async def generate_qr_code(self, instance_name: str) -> str:
+        # Use POST as per Evolution API v2 documentation
         url = f"{self.base_url}/instance/connect/{instance_name}"
-        logger.info("Attempting to connect instance: %s", url)
+        
+        logger.info("Generating QR code via POST: url=%s", url)
         
         async with httpx.AsyncClient() as client:
             try:
+                # MUST be a POST request
                 response = await client.post(url, headers=self._get_headers())
-                # LOG THE FULL RESPONSE BEFORE DOING ANYTHING ELSE
-                logger.info("Gateway raw response: %s", response.text)
                 
-                response.raise_for_status() # This will raise an HTTPError for non-200s
+                if response.status_code != 200:
+                    logger.error(
+                        "Evolution API QR generation failed. status_code=%d, url=%s, response=%s",
+                        response.status_code, url, response.text
+                    )
+                    response.raise_for_status()
                 
                 data = response.json()
-                # ... (rest of your logic)
-            except httpx.HTTPStatusError as exc:
-                logger.error("HTTP error: %s. Response: %s", str(exc), exc.response.text)
+                
+                # Evolution API v2 usually returns base64 inside a 'qrcode' object
+                # or directly in the base64 field of the response
+                qrcode_data = data.get("qrcode") or {}
+                base64_str = qrcode_data.get("base64") if isinstance(qrcode_data, dict) else data.get("base64")
+                
+                if base64_str:
+                    return base64_str
+                else:
+                    logger.error("QR Code generation succeeded but no base64 found in response: %s", data)
+                    raise RuntimeError("QR code data not found in API response.")
+                    
+            except Exception as exc:
+                logger.error("Error during QR code generation: url=%s, error=%s", url, str(exc))
                 raise
+
+    async def configure_webhook(self, instance_name: str) -> dict:
+        # ... (ensure this method is also indented by 4 spaces)
 
     async def configure_webhook(self, instance_name: str) -> dict:
         url = f"{self.base_url}/webhook/set/{instance_name}"
