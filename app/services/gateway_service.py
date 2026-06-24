@@ -69,13 +69,13 @@ class EvolutionGatewayService:
                 instance_name, str(status_exc)
             )
 
-        # 2. Proceed to the connection call (GET method for /instance/initialize/{instanceName})
-        url = f"{self.base_url}/instance/initialize/{instance_name}"
+        # 2. Proceed to the connection call (POST method for /instance/connect/{instanceName})
+        url = f"{self.base_url}/instance/connect/{instance_name}"
         logger.info("Generating QR code: url=%s", url)
         
         client = self._get_client()
         try:
-            response = await client.get(url, headers=self._get_headers())
+            response = await client.post(url, headers=self._get_headers())
             if response.status_code != 200:
                 logger.error(
                     "Evolution API QR generation failed. status_code=%d, url=%s, response=%s",
