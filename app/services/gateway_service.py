@@ -69,17 +69,20 @@ class EvolutionGatewayService:
                 instance_name, str(status_exc)
             )
 
-        # 2. Proceed to the connection call (POST method for /instance/connect/{instanceName})
-        url = f"{self.base_url}/instance/connect/{instance_name}"
-        logger.info("Generating QR code: url=%s", url)
+        # 2. Proceed to the connection call
+        # Evolution API router declares this as POST /instance/connect (no path param).
+        # The instance target is passed in the JSON body, not appended to the URL.
+        url = f"{self.base_url}/instance/connect"
+        payload = {"instanceName": instance_name}
+        logger.info("Generating QR code: url=%s, payload=%s", url, payload)
         
         client = self._get_client()
         try:
-            response = await client.post(url, headers=self._get_headers())
+            response = await client.post(url, json=payload, headers=self._get_headers())
             if response.status_code != 200:
                 logger.error(
-                    "Evolution API QR generation failed. status_code=%d, url=%s, response=%s",
-                    response.status_code, url, response.text
+                    "Evolution API QR generation failed. status_code=%d, url=%s, payload=%s, response=%s",
+                    response.status_code, url, payload, response.text
                 )
                 if any(x in response.text.lower() for x in ["open", "connected", "already"]):
                     logger.info("Connect call response indicates instance is already open/connected: %s", response.text)
@@ -107,8 +110,8 @@ class EvolutionGatewayService:
                 logger.info("HTTP Status error indicates already open: %s", resp_text)
                 return "ALREADY_CONNECTED"
             logger.error(
-                "HTTP error during QR code generation: url=%s, status_code=%d, error=%s, response=%s",
-                url, exc.response.status_code, str(exc), resp_text
+                "HTTP error during QR code generation: url=%s, payload=%s, status_code=%d, error=%s, response=%s",
+                url, payload, exc.response.status_code, str(exc), resp_text
             )
             raise
         except Exception as exc:
