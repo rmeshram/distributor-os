@@ -68,17 +68,15 @@ class EvolutionGatewayService:
             )
 
         # 2. Connect call to get QR code.
-        # Evolution API source (instance.router.ts):
-        #   .get(this.routerPath('connect'), ...)
-        # routerPath('connect') => '/connect/:instanceName'  (param=true by default)
-        # Router mounted at /instance => full path: GET /instance/connect/:instanceName
-        # Method is GET, instance name is a URL path param — no request body.
-        url = f"{self.base_url}/instance/connect/{instance_name}"
-        logger.info("Generating QR code: url=%s method=GET", url)
+        url = f"{self.base_url}/instance/connectToWhatsapp"
+        payload = {
+            "instanceName": instance_name
+        }
+        logger.info("Generating QR code: url=%s method=POST, payload=%s", url, payload)
         
         client = self._get_client()
         try:
-            response = await client.get(url, headers=self._get_headers())
+            response = await client.post(url, json=payload, headers=self._get_headers())
             if response.status_code != 200:
                 logger.error(
                     "Evolution API QR generation failed. status_code=%d, url=%s, response=%s",

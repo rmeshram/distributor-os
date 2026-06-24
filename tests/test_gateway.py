@@ -20,7 +20,7 @@ async def test_evolution_gateway_service_methods():
             if "instance/create" in url:
                 mock_resp.status_code = 201
                 mock_resp.json.return_value = {"instance": {"instanceName": "test_bot"}}
-            elif "instance/connect" in url:
+            elif "connectToWhatsapp" in url:
                 mock_resp.json.return_value = {"qrcode": {"base64": "data:image/png;base64,mockqr"}}
             elif "webhook/set" in url:
                 mock_resp.json.return_value = {"status": "success"}
