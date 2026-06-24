@@ -70,8 +70,10 @@ def test_provision_endpoint_success():
     with patch("app.services.gateway_service.EvolutionGatewayService.initialize_instance", new_callable=AsyncMock) as mock_init, \
          patch("app.services.gateway_service.EvolutionGatewayService.configure_webhook", new_callable=AsyncMock) as mock_webhook, \
          patch("app.services.gateway_service.EvolutionGatewayService.generate_qr_code", new_callable=AsyncMock) as mock_qr, \
-         patch("app.services.gateway_service.EvolutionGatewayService.get_connection_status", new_callable=AsyncMock) as mock_status:
+         patch("app.services.gateway_service.EvolutionGatewayService.get_connection_status", new_callable=AsyncMock) as mock_status, \
+         patch("httpx.AsyncClient.delete", new_callable=AsyncMock) as mock_delete:
          
+        mock_delete.return_value = MagicMock(status_code=404)
         mock_init.return_value = {"status": "created"}
         mock_webhook.return_value = {"status": "webhook_set"}
         mock_qr.return_value = "data:image/png;base64,mockqr"
