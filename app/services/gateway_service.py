@@ -9,7 +9,7 @@ logger = logging.getLogger("uvicorn.error")
 
 class EvolutionGatewayService:
     def __init__(self, client: Optional[httpx.AsyncClient] = None):
-        self.base_url = os.getenv("EVOLUTION_API_URL", "").rstrip("/")
+        self.base_url = os.getenv("EVOLUTION_API_URL", "https://evolution-api-latest-vma7.onrender.com").rstrip("/")
         self.api_key = os.getenv("EVOLUTION_API_KEY")
         self._client = client
 
