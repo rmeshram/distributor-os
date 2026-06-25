@@ -116,7 +116,7 @@ class EvolutionGatewayService:
                 return "ALREADY_CONNECTED"
 
             # QR in first response? (happens on warm containers)
-            base64_str = self._extract_base64(data)
+            base64_str = self._extract_base64(data, response.text)
             if base64_str:
                 logger.info("QR received in Phase 1 response.")
                 return base64_str
@@ -165,7 +165,7 @@ class EvolutionGatewayService:
                     logger.info("Instance became open/connected during poll.")
                     return "ALREADY_CONNECTED"
 
-                base64_str = self._extract_base64(data)
+                base64_str = self._extract_base64(data, response.text)
                 if base64_str:
                     logger.info("QR base64 received on Phase 2 attempt %d.", attempt)
                     return base64_str
@@ -186,18 +186,21 @@ class EvolutionGatewayService:
             if self._client is None:
                 await client.aclose()
 
-    def _extract_base64(self, data: dict) -> Optional[str]:
-        """Extract base64 QR string from any known response shape Evolution API returns."""
+    def _extract_base64(self, data: dict, raw_text: str = "") -> Optional[str]:
+        """
+        Extract base64 QR string from any known response shape Evolution API returns.
+        Handles 4 shapes defensively — no KeyError possible.
+        """
         # Shape 1: { qrcode: { base64: "..." } }
         qr_block = data.get("qrcode")
         if isinstance(qr_block, dict):
             b = qr_block.get("base64")
-            if b:
+            if b and isinstance(b, str):
                 return b
 
         # Shape 2: { base64: "..." } (flat)
         b = data.get("base64")
-        if b:
+        if b and isinstance(b, str):
             return b
 
         # Shape 3: { instance: { qrcode: { base64: "..." } } }
@@ -206,8 +209,17 @@ class EvolutionGatewayService:
             inner_qr = instance_block.get("qrcode")
             if isinstance(inner_qr, dict):
                 b = inner_qr.get("base64")
-                if b:
+                if b and isinstance(b, str):
                     return b
+
+        # Shape 4: base64 present somewhere in raw JSON but in an unexpected nesting.
+        # Regex fallback — only runs if we have raw text and all dict paths missed.
+        if raw_text and "base64" in raw_text:
+            import re
+            match = re.search(r'"base64"\s*:\s*"([^"]+)"', raw_text)
+            if match:
+                logger.info("QR base64 extracted via regex fallback.")
+                return match.group(1)
 
         return None
 
