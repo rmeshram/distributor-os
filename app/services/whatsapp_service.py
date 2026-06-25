@@ -1,3 +1,4 @@
+import asyncio
 import typing
 import uuid
 import logging
@@ -459,9 +460,24 @@ async def provision_whatsapp_instance(payload: ProvisionRequest):
 
         # Step 2: Initialize Clean Instance (Do not swallow errors)
         init_res = await service.initialize_instance(payload.instance_name)
+        logger.info("Instance created. Waiting 3s for Evolution API to register it in memory...")
+        await asyncio.sleep(3)
 
         # Step 3: Configure Webhook
-        webhook_res = await service.configure_webhook(payload.instance_name)
+        # Non-fatal: Evolution API's webhook controller reads waInstances[name] from memory.
+        # If the service restarted between create and this call, that map entry may not exist
+        # yet and throws a 500. We log and continue — webhook can be re-applied separately.
+        webhook_res = None
+        webhook_ok = False
+        try:
+            webhook_res = await service.configure_webhook(payload.instance_name)
+            webhook_ok = True
+            logger.info("Webhook configured successfully: %s", webhook_res)
+        except Exception as wh_exc:
+            logger.warning(
+                "Webhook configuration failed (non-fatal, will continue to QR): %s", str(wh_exc)
+            )
+            webhook_res = {"status": "failed", "reason": str(wh_exc)}
 
         # Step 4: Generate QR Session Data
         qr_base64 = await service.generate_qr_code(payload.instance_name)
@@ -469,10 +485,10 @@ async def provision_whatsapp_instance(payload: ProvisionRequest):
 
         return {
             "status": "success",
-            "message": "Instance provisioned successfully",
+            "message": "Instance provisioned successfully" if webhook_ok else "Instance provisioned but webhook config failed — scan QR then reconfigure webhook",
             "instance_name": payload.instance_name,
             "qr_code": qr_base64,
-            "webhook_configured": True,
+            "webhook_configured": webhook_ok,
             "connection_status": conn_status,
             "init_response": init_res,
             "webhook_response": webhook_res
