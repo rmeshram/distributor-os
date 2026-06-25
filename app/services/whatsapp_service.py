@@ -443,49 +443,46 @@ async def provision_whatsapp_instance(payload: ProvisionRequest):
     import httpx
     service = EvolutionGatewayService()
     try:
-        # Step 1: Force Purge (Defensive Delete)
+        # Step 1: Force Purge
+        # Evolution API returns 403 (not 409) when instance name already exists on /create.
+        # Must guarantee clean deletion and memory flush before proceeding.
         delete_url = f"{service.base_url}/instance/delete/{payload.instance_name}"
-        logger.info("Purging legacy instance if it exists: url=%s", delete_url)
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.delete(delete_url, headers=service._get_headers())
-                if response.status_code == 404:
-                    logger.info("No legacy instance found to purge, moving forward.")
-                elif response.status_code not in (200, 201):
-                    logger.info("Outbound delete request returned code %d. Proceeding anyway.", response.status_code)
-                else:
-                    logger.info("Successfully purged legacy instance %s.", payload.instance_name)
-        except Exception as delete_exc:
-            logger.info("No legacy instance found to purge, moving forward. Details: %s", str(delete_exc))
+        logger.info("Purging legacy instance: DELETE %s", delete_url)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            del_response = await client.delete(delete_url, headers=service._get_headers())
+            logger.info("Delete response: status=%d body=%s",
+                        del_response.status_code, del_response.text[:200])
+            if del_response.status_code == 404:
+                logger.info("No legacy instance found - clean slate.")
+            elif del_response.status_code in (200, 201):
+                logger.info("Legacy instance purged. Waiting 2s for Evolution API to clear memory...")
+                await asyncio.sleep(2)
+            else:
+                logger.warning("Delete returned %d - proceeding anyway.", del_response.status_code)
 
-        # Step 2: Initialize Clean Instance (Do not swallow errors)
+        # Step 2: Create fresh instance
         init_res = await service.initialize_instance(payload.instance_name)
-        logger.info("Instance created. Waiting 3s for Evolution API to register it in memory...")
+        logger.info("Instance created. Waiting 3s for Baileys to initialise...")
         await asyncio.sleep(3)
 
-        # Step 3: Configure Webhook
-        # Non-fatal: Evolution API's webhook controller reads waInstances[name] from memory.
-        # If the service restarted between create and this call, that map entry may not exist
-        # yet and throws a 500. We log and continue — webhook can be re-applied separately.
+        # Step 3: Configure Webhook (non-fatal)
         webhook_res = None
         webhook_ok = False
         try:
             webhook_res = await service.configure_webhook(payload.instance_name)
             webhook_ok = True
-            logger.info("Webhook configured successfully: %s", webhook_res)
+            logger.info("Webhook configured: %s", webhook_res)
         except Exception as wh_exc:
-            logger.warning(
-                "Webhook configuration failed (non-fatal, will continue to QR): %s", str(wh_exc)
-            )
+            logger.warning("Webhook config failed (non-fatal): %s", str(wh_exc))
             webhook_res = {"status": "failed", "reason": str(wh_exc)}
 
-        # Step 4: Generate QR Session Data
+        # Step 4: Fetch QR code
         qr_base64 = await service.generate_qr_code(payload.instance_name)
         conn_status = await service.get_connection_status(payload.instance_name)
 
         return {
             "status": "success",
-            "message": "Instance provisioned successfully" if webhook_ok else "Instance provisioned but webhook config failed — scan QR then reconfigure webhook",
+            "message": "Instance provisioned successfully" if webhook_ok else "Provisioned - webhook config failed, reconfigure separately",
             "instance_name": payload.instance_name,
             "qr_code": qr_base64,
             "webhook_configured": webhook_ok,
