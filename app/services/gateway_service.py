@@ -122,19 +122,44 @@ class EvolutionGatewayService:
                 return base64_str
 
             # ── Phase 2: poll without re-triggering socket ────────────────────
-            # Wait a beat for Baileys to get past the WhatsApp handshake
-            logger.info("Phase 2 — QR not ready yet, polling every 3s for up to 45s...")
-            for attempt in range(1, 16):  # 15 attempts × 3s = 45 seconds
+            # Baileys opens a WebSocket to WhatsApp servers and fires the QR in a callback.
+            # On Render free tier this takes 5-20s. We poll /connect which, when state=
+            # "connecting", just reads instance.qrCode from memory without resetting the socket.
+            logger.info("Phase 2 - QR not ready yet, polling every 3s for up to 45s...")
+            consecutive_errors = 0
+            for attempt in range(1, 16):  # 15 x 3s = 45 seconds
                 await asyncio.sleep(3)
 
                 response = await client.get(url, headers=self._get_headers())
                 logger.info("Phase 2 attempt %d/15: status=%d body=%s",
                             attempt, response.status_code, response.text[:500])
 
+                # 404 = instance was auto-deleted by Evolution API (Baileys fatal crash)
+                if response.status_code == 404:
+                    raise RuntimeError(
+                        "Instance was deleted by Evolution API during QR polling. "
+                        "Baileys crashed trying to reach WhatsApp servers. "
+                        "Check Evolution API logs on Render for the root cause."
+                    )
+
                 if response.status_code != 200:
                     response.raise_for_status()
 
                 data = response.json()
+
+                # Detect Baileys crash loop: {"error": true, "message": "[object Object]"}
+                if data.get("error") is True:
+                    consecutive_errors += 1
+                    logger.warning("Baileys error response (consecutive=%d): %s", consecutive_errors, data)
+                    if consecutive_errors >= 3:
+                        raise RuntimeError(
+                            "Baileys is in a crash loop (got 3 consecutive error responses). "
+                            "Evolution API cannot reach WhatsApp servers from Render. "
+                            "Check Evolution API service logs for the underlying error."
+                        )
+                    continue
+                else:
+                    consecutive_errors = 0  # reset on good response
 
                 if data.get("state") == "open" or (data.get("instance", {}) or {}).get("state") == "open":
                     logger.info("Instance became open/connected during poll.")
@@ -145,14 +170,12 @@ class EvolutionGatewayService:
                     logger.info("QR base64 received on Phase 2 attempt %d.", attempt)
                     return base64_str
 
-                logger.info("QR not ready (attempt %d/15). count=%s",
-                            attempt,
-                            (data.get("qrcode") or {}).get("count", "?")
-                            if isinstance(data.get("qrcode"), dict) else "?")
+                count = (data.get("qrcode") or {}).get("count", "?") if isinstance(data.get("qrcode"), dict) else "?"
+                logger.info("QR not ready yet (attempt %d/15, count=%s)", attempt, count)
 
             raise RuntimeError(
                 "QR code not received after 45 seconds. "
-                "Check Evolution API logs on Render — Baileys may be failing to reach WhatsApp servers."
+                "Baileys may be slow to handshake with WhatsApp servers on Render free tier."
             )
 
         except httpx.HTTPStatusError as exc:
