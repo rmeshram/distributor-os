@@ -1,10 +1,12 @@
 import uuid
 import logging
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Cookie, Header
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.gateway_service import EvolutionGatewayService
+import httpx
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -73,10 +75,67 @@ async def provision_instance(payload: EvolutionProvisionRequest):
         )
 
 @router.get("/status", status_code=status.HTTP_200_OK)
-async def get_instance_status(instance_name: str = Query(..., alias="instance_name")):
+async def get_instance_status(
+    instance_name: str = Query(..., alias="instance_name"),
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
     service = EvolutionGatewayService()
     try:
-        conn_status = await service.get_connection_status(instance_name)
+        # Fetch connection status details
+        url = f"{service.base_url}/instance/connectionState/{instance_name}"
+        headers = service._get_headers()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, headers=headers)
+            
+        if response.status_code != 200:
+            response.raise_for_status()
+            
+        data = response.json()
+        instance_data = data.get("instance") or {}
+        conn_status = (
+            data.get("connectionStatus")
+            or instance_data.get("connectionStatus")
+            or instance_data.get("state")
+            or instance_data.get("status")
+            or "close"
+        )
+        
+        # Sync owner number only when connection flips to open
+        if conn_status == "open":
+            owner_jid = instance_data.get("owner") or data.get("owner")
+            if owner_jid:
+                from app.services.tenant_service import resolve_tenant_id
+                from app.models.tenant import DistributorTenant
+                from app.utils.phone import normalize_phone_number
+                from app.services.ingestion_service import IngestionService
+                
+                try:
+                    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+                except Exception:
+                    resolved_tenant_id = None
+                    
+                if resolved_tenant_id:
+                    tenant = db.get(DistributorTenant, resolved_tenant_id)
+                    if tenant:
+                        # Normalize number to standard E.164 (+91XXXXXXXXXX)
+                        normalized_owner = normalize_phone_number(owner_jid)
+                        
+                        # Idempotency check: only write to DB if the number changed
+                        if tenant.whatsapp_order_phone != normalized_owner:
+                            logger.info(
+                                "Event Discriminator Sync: connection status flipped to open. "
+                                "Updating whatsapp_order_phone for tenant %s to %s",
+                                resolved_tenant_id, normalized_owner
+                            )
+                            tenant.whatsapp_order_phone = normalized_owner
+                            db.commit()
+                            
+                            # Flush ingestion cache to keep runtime discriminator state fresh
+                            IngestionService.invalidate_tenant_cache(resolved_tenant_id)
+                            
         return {"status": conn_status}
     except Exception as e:
         logger.error("Failed to fetch connection status: %s", str(e), exc_info=True)
