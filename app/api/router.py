@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from app.api.v1.whatsapp import router as whatsapp_router
+from app.api.v1.evolution import router as evolution_router
 from app.api.v1.ingestion import router as ingestion_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.products import router as products_router
@@ -18,6 +19,7 @@ api_router = APIRouter()
 
 # 1. High Priority Core Functional Routers
 api_router.include_router(whatsapp_router)
+api_router.include_router(evolution_router)
 api_router.include_router(ingestion_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(products_router)

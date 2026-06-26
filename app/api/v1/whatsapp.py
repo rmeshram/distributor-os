@@ -37,6 +37,7 @@ class WebhookPayload(BaseModel):
     message: typing.Optional[str] = None  # Fallback for regression firewall test
 
 
+# LEGACY_META_CODE_START
 @router.get("/webhook")
 def verify_whatsapp_webhook(
     hub_mode: str = Query(None, alias="hub.mode"),
@@ -46,17 +47,12 @@ def verify_whatsapp_webhook(
     """
     WhatsApp Webhook Verification (GET handshake).
     """
-    verify_token = os.getenv("WHATSAPP_VERIFY_TOKEN")
-    logger.info("WhatsApp verification attempt: mode=%s, token=%s", hub_mode, hub_verify_token)
-    if hub_mode == "subscribe" and hub_verify_token == verify_token:
-        logger.info("WhatsApp verification successful. Returning challenge.")
-        return Response(content=hub_challenge, media_type="text/plain")
-    
-    logger.warning("WhatsApp verification failed.")
+    logger.warning("Meta Webhook GET verification invoked but Meta Integration is disabled.")
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Verification token mismatch or invalid mode"
+        detail="Meta integration is disabled/legacy. Use Evolution API instead."
     )
+# LEGACY_META_CODE_END
 
 
 def process_whatsapp_webhook_payload(
@@ -90,18 +86,20 @@ def process_whatsapp_webhook_payload(
 
         # 2. Tenant Resolution Layer
         bot_phone_id = None
-        extra = getattr(payload, "model_extra", None) or {}
-        entry = extra.get("entry")
-        if not entry and isinstance(payload, dict):
-            entry = payload.get("entry")
-        
-        if entry and isinstance(entry, list) and len(entry) > 0:
-            changes = entry[0].get("changes", [])
-            if changes and isinstance(changes, list) and len(changes) > 0:
-                value = changes[0].get("value", {})
-                if value and isinstance(value, dict):
-                    msg_metadata = value.get("metadata", {})
-                    bot_phone_id = msg_metadata.get("phone_number_id")
+        # LEGACY_META_CODE_START
+        # extra = getattr(payload, "model_extra", None) or {}
+        # entry = extra.get("entry")
+        # if not entry and isinstance(payload, dict):
+        #     entry = payload.get("entry")
+        # 
+        # if entry and isinstance(entry, list) and len(entry) > 0:
+        #     changes = entry[0].get("changes", [])
+        #     if changes and isinstance(changes, list) and len(changes) > 0:
+        #         value = changes[0].get("value", {})
+        #         if value and isinstance(value, dict):
+        #             msg_metadata = value.get("metadata", {})
+        #             bot_phone_id = msg_metadata.get("phone_number_id")
+        # LEGACY_META_CODE_END
 
         resolved_tenant_id = None
         if bot_phone_id:

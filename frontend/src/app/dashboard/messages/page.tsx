@@ -163,6 +163,108 @@ export default function MessagesPage() {
   
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [approvedOrders, setApprovedOrders] = useState<Record<string, { internalId: string; id: string }>>({});
+
+  // Triage state variables
+  const [activeFeedTab, setActiveFeedTab] = useState<"inbox" | "triage">("inbox");
+  const [orders, setOrders] = useState<any[]>([]);
+  const [productsList, setProductsList] = useState<any[]>([]);
+  const [selectedTriageOrderId, setSelectedTriageOrderId] = useState<string | null>(null);
+  const [triageOrderDetails, setTriageOrderDetails] = useState<any[] | null>(null);
+  const [loadingTriageDetails, setLoadingTriageDetails] = useState(false);
+  const [resolvingTriageItemId, setResolvingTriageItemId] = useState<string | null>(null);
+
+  // Fetch orders and products for triage
+  const fetchTriageData = useCallback(async () => {
+    if (!activeTenantId) return;
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      
+      // Fetch orders
+      const ordersResp = await fetch(`${apiBase}/api/v1/orders?tenant_id=${activeTenantId}`, {
+        credentials: "include"
+      });
+      if (ordersResp.ok) {
+        const ordersData = await ordersResp.json();
+        setOrders(ordersData);
+      }
+
+      // Fetch products catalog
+      const productsResp = await fetch(`${apiBase}/api/v1/products?tenant_id=${activeTenantId}`, {
+        credentials: "include"
+      });
+      if (productsResp.ok) {
+        const productsData = await productsResp.json();
+        setProductsList(productsData);
+      }
+    } catch (err) {
+      console.error("Failed to fetch triage data:", err);
+    }
+  }, [activeTenantId]);
+
+  useEffect(() => {
+    fetchTriageData();
+  }, [fetchTriageData]);
+
+  const fetchTriageOrderDetails = async (orderId: string) => {
+    setLoadingTriageDetails(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetch(`${apiBase}/api/v1/dashboard/order-details/${orderId}`, {
+        credentials: "include"
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        setTriageOrderDetails(data);
+        setSelectedTriageOrderId(orderId);
+      }
+    } catch (err) {
+      console.error("Failed to load triage order details:", err);
+      showToast("Error loading triage order details.", "error");
+    } finally {
+      setLoadingTriageDetails(false);
+    }
+  };
+
+  const handleResolveTriageItem = async (itemId: string, skuCode: string, quantity: number) => {
+    setResolvingTriageItemId(itemId);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetch(`${apiBase}/api/v1/orders/items/${itemId}/resolve`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sku_code: skuCode,
+          quantity: quantity
+        })
+      });
+
+      if (resp.ok) {
+        showToast("Order line item resolved successfully!", "success");
+        // Re-fetch triage data and order details
+        await fetchTriageData();
+        if (selectedTriageOrderId) {
+          await fetchTriageOrderDetails(selectedTriageOrderId);
+        }
+      } else {
+        const data = await resp.json();
+        showToast(data.detail || "Failed to resolve item.", "error");
+      }
+    } catch (err) {
+      console.error("Resolve error:", err);
+      showToast("Connection failure during item resolution.", "error");
+    } finally {
+      setResolvingTriageItemId(null);
+    }
+  };
+
+  const handleSelectTriageOrder = (order: any) => {
+    const match = customers.find(c => c.retailer_name === order.customer);
+    if (match) {
+      handleSelectCustomer(match);
+    }
+    fetchTriageOrderDetails(order.id);
+  };
   
   const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
     show: false,
@@ -419,67 +521,144 @@ export default function MessagesPage() {
               </div>
             </div>
 
+            {/* Feed Tab Bar */}
+            <div className="flex border-b border-slate-100 bg-white">
+              <button
+                onClick={() => setActiveFeedTab("inbox")}
+                className={`flex-1 text-center py-2.5 text-xs font-bold border-b-2 transition-all ${
+                  activeFeedTab === "inbox"
+                    ? "border-emerald-500 text-emerald-600"
+                    : "border-transparent text-slate-400 hover:text-slate-600"
+                }`}
+              >
+                Inbox
+              </button>
+              <button
+                onClick={() => setActiveFeedTab("triage")}
+                className={`flex-1 text-center py-2.5 text-xs font-bold border-b-2 transition-all flex items-center justify-center gap-1.5 ${
+                  activeFeedTab === "triage"
+                    ? "border-rose-500 text-rose-600"
+                    : "border-transparent text-slate-400 hover:text-slate-600"
+                }`}
+              >
+                <span>Triage Queue</span>
+                {orders.filter(o => o.status === "Needs Review").length > 0 && (
+                  <span className="bg-rose-500 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full shrink-0">
+                    {orders.filter(o => o.status === "Needs Review").length}
+                  </span>
+                )}
+              </button>
+            </div>
+
             {/* Customers list container */}
             <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
-              {loading ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-3">
-                  <Loader2 className="w-6 h-6 text-brand-blue animate-spin" />
-                  <span className="text-xs text-slate-500 font-semibold">Loading Retailers...</span>
-                </div>
-              ) : filteredCustomers.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                  <AlertCircle className="w-8 h-8 mb-2" />
-                  <span className="text-xs font-medium">No retailers found</span>
-                </div>
+              {activeFeedTab === "inbox" ? (
+                loading ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3">
+                    <Loader2 className="w-6 h-6 text-brand-blue animate-spin" />
+                    <span className="text-xs text-slate-500 font-semibold">Loading Retailers...</span>
+                  </div>
+                ) : filteredCustomers.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                    <AlertCircle className="w-8 h-8 mb-2" />
+                    <span className="text-xs font-medium">No retailers found</span>
+                  </div>
+                ) : (
+                  filteredCustomers.map((c) => {
+                    const isSelected = selectedCustomer?.id === c.id;
+                    const unread = unreadStates[c.id] || 0;
+                    const lastMessage = chatStreams[c.id]?.length 
+                      ? chatStreams[c.id][chatStreams[c.id].length - 1].text
+                      : "No messages yet";
+
+                    return (
+                      <button
+                        key={c.id}
+                        onClick={() => handleSelectCustomer(c)}
+                        className={`w-full text-left p-4 transition-all duration-200 flex gap-3 ${
+                          isSelected 
+                            ? "bg-slate-50 border-l-4 border-brand-blue" 
+                            : "hover:bg-slate-50/60 border-l-4 border-transparent"
+                        }`}
+                      >
+                        {/* Avatar */}
+                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600 text-sm border border-slate-200 shadow-sm flex-shrink-0">
+                          {c.retailer_name.substring(0, 2).toUpperCase()}
+                        </div>
+
+                        {/* Info & Last Msg */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-semibold text-xs text-slate-800 truncate">
+                              {c.retailer_name}
+                            </h4>
+                            {unread > 0 && (
+                              <span className="bg-emerald-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center animate-bounce">
+                                {unread}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-semibold mt-0.5 truncate">
+                            {c.phone}
+                          </p>
+                          <p className="text-[11px] text-slate-500 font-medium mt-1 truncate">
+                            {lastMessage}
+                          </p>
+                          <div className="flex items-center justify-between mt-1 text-[9px] font-semibold">
+                            <span className="text-slate-400">Bal: ₹{c.outstanding_balance.toLocaleString()}</span>
+                            <span className="text-slate-400">Terms: {c.payment_terms}</span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })
+                )
               ) : (
-                filteredCustomers.map((c) => {
-                  const isSelected = selectedCustomer?.id === c.id;
-                  const unread = unreadStates[c.id] || 0;
-                  const lastMessage = chatStreams[c.id]?.length 
-                    ? chatStreams[c.id][chatStreams[c.id].length - 1].text
-                    : "No messages yet";
-
-                  return (
-                    <button
-                      key={c.id}
-                      onClick={() => handleSelectCustomer(c)}
-                      className={`w-full text-left p-4 transition-all duration-200 flex gap-3 ${
-                        isSelected 
-                          ? "bg-slate-50 border-l-4 border-brand-blue" 
-                          : "hover:bg-slate-50/60 border-l-4 border-transparent"
-                      }`}
-                    >
-                      {/* Avatar */}
-                      <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600 text-sm border border-slate-200 shadow-sm flex-shrink-0">
-                        {c.retailer_name.substring(0, 2).toUpperCase()}
-                      </div>
-
-                      {/* Info & Last Msg */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-semibold text-xs text-slate-800 truncate">
-                            {c.retailer_name}
-                          </h4>
-                          {unread > 0 && (
-                            <span className="bg-emerald-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center animate-bounce">
-                              {unread}
-                            </span>
-                          )}
+                // Triage Feed Tab list
+                orders.filter(o => o.status === "Needs Review").length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                    <CheckCircle2 className="w-8 h-8 mb-2 text-emerald-500" />
+                    <span className="text-xs font-semibold text-slate-500">Triage Queue is Clean!</span>
+                  </div>
+                ) : (
+                  orders.filter(o => o.status === "Needs Review").map((o) => {
+                    const isSelected = selectedTriageOrderId === o.id;
+                    return (
+                      <button
+                        key={o.id}
+                        onClick={() => handleSelectTriageOrder(o)}
+                        className={`w-full text-left p-4 transition-all duration-200 border-l-4 ${
+                          isSelected 
+                            ? "bg-rose-50/50 border-rose-500" 
+                            : "hover:bg-rose-50/20 border-transparent"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 rounded-full bg-rose-50 border border-rose-200 flex items-center justify-center font-bold text-rose-600 text-xs shrink-0">
+                            TRG
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-center">
+                              <h4 className="font-bold text-xs text-slate-800 truncate">{o.customer}</h4>
+                              <span className="text-[9px] font-bold bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded border border-rose-200">
+                                Review
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-brand-blue font-bold mt-1">
+                              {o.order_id}
+                            </p>
+                            <p className="text-[11px] text-slate-500 font-semibold mt-1">
+                              Amount: ₹{o.amount.toLocaleString([], { minimumFractionDigits: 2 })}
+                            </p>
+                            <p className="text-[9px] text-slate-400 font-semibold mt-1">
+                              {o.created_on}
+                            </p>
+                          </div>
                         </div>
-                        <p className="text-[10px] text-slate-400 font-semibold mt-0.5 truncate">
-                          {c.phone}
-                        </p>
-                        <p className="text-[11px] text-slate-500 font-medium mt-1 truncate">
-                          {lastMessage}
-                        </p>
-                        <div className="flex items-center justify-between mt-1 text-[9px] font-semibold">
-                          <span className="text-slate-400">Bal: ₹{c.outstanding_balance.toLocaleString()}</span>
-                          <span className="text-slate-400">Terms: {c.payment_terms}</span>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })
+                      </button>
+                    );
+                  })
+                )
               )}
             </div>
           </div>
@@ -581,7 +760,104 @@ export default function MessagesPage() {
 
           {/* Panel 3: Right Pane (AI Order Ingestion Engine) */}
           <div className="w-96 bg-white flex flex-col h-full overflow-y-auto border-l border-slate-200">
-            {selectedCustomer && activeExtraction ? (
+            {activeFeedTab === "triage" && selectedTriageOrderId ? (
+              // Triage Resolution Pane
+              <div className="flex flex-col h-full">
+                <div className="bg-gradient-to-r from-rose-50 to-orange-50 border-b border-rose-100 p-4">
+                  <div className="flex items-center gap-2 text-rose-800">
+                    <div className="w-8 h-8 rounded-lg bg-rose-500 text-white flex items-center justify-center">
+                      <AlertCircle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm">Order SKU Resolution</h3>
+                      <p className="text-[10px] text-rose-600 font-semibold mt-0.5">
+                        Assign unmatched SKUs to catalog items in one click.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 space-y-5 flex-1">
+                  {loadingTriageDetails ? (
+                    <div className="flex flex-col items-center justify-center py-20 space-y-3">
+                      <Loader2 className="w-6 h-6 text-rose-500 animate-spin" />
+                      <span className="text-xs text-slate-500 font-semibold">Loading line items...</span>
+                    </div>
+                  ) : triageOrderDetails ? (
+                    <div className="space-y-4">
+                      <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-3.5 space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-semibold text-slate-400">Retailer</span>
+                          <span className="font-bold text-slate-700">{selectedCustomer?.retailer_name}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-semibold text-slate-400">Order ID</span>
+                          <span className="font-extrabold text-brand-blue">{orders.find(o => o.id === selectedTriageOrderId)?.order_id}</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                          Line Items
+                        </label>
+                        {triageOrderDetails.map((item, idx) => {
+                          const isUnmatched = item.sku_id === "UNMATCHED_SKU" || item.sku_id === "UNMATCHED_TRIAGE_SKU";
+                          return (
+                            <div key={idx} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col gap-2">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1 pr-4">
+                                  {isUnmatched ? (
+                                    <div className="space-y-2">
+                                      <p className="font-bold text-xs text-rose-600 flex items-center gap-1">
+                                        <AlertCircle className="w-4 h-4 shrink-0 animate-pulse" />
+                                        <span>Unmatched Line Item</span>
+                                      </p>
+                                      <p className="text-[10px] text-slate-500 font-semibold leading-relaxed">
+                                        Original Input: <span className="italic font-bold text-slate-700">"{item.brand}"</span>
+                                      </p>
+                                      
+                                      <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Map to Catalog SKU</label>
+                                      <select
+                                        disabled={resolvingTriageItemId === item.id}
+                                        onChange={(e) => {
+                                          if (e.target.value) {
+                                            handleResolveTriageItem(item.id, e.target.value, item.quantity);
+                                          }
+                                        }}
+                                        className="w-full mt-1 p-2 border border-rose-200 rounded-lg text-xs bg-white text-slate-700 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer"
+                                      >
+                                        <option value="">-- Select SKU --</option>
+                                        {productsList.map((p) => (
+                                          <option key={p.id} value={p.sku_id}>
+                                            {p.sku_id} - {p.brand} {p.category} ({p.pack_size})
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <p className="font-bold text-xs text-slate-800">{item.brand} SKU</p>
+                                      <p className="text-[10px] text-slate-400 font-semibold">{item.sku_id} ({item.pack_size})</p>
+                                      <p className="text-xs font-extrabold text-slate-700 mt-1">₹{item.total_price.toLocaleString([], { minimumFractionDigits: 2 })}</p>
+                                    </>
+                                  )}
+                                </div>
+                                <div className="flex flex-col items-end shrink-0">
+                                  <span className="text-[10px] font-extrabold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">Qty: {item.quantity}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-10 text-slate-400 font-semibold">Select a triage order to view line items</div>
+                  )}
+                </div>
+              </div>
+            ) : selectedCustomer && activeExtraction ? (
+              // Normal AI Extraction Pane
               <div className="flex flex-col h-full">
                 {/* AI Banner Header */}
                 <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100 p-4">

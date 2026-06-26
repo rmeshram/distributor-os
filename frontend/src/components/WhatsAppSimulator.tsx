@@ -92,6 +92,8 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       
+      // LEGACY_META_CODE_START
+      /*
       const payload = {
         tenant_id: activeTenantId,
         object: "whatsapp_business_account",
@@ -127,6 +129,14 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
             ]
           }
         ]
+      };
+      */
+      // LEGACY_META_CODE_END
+
+      const payload = {
+        tenant_id: activeTenantId,
+        phone_number: customPhone,
+        message_text: messageText
       };
 
       const response = await fetch(`${apiBase}/api/v1/whatsapp/webhook`, {

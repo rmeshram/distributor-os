@@ -126,7 +126,7 @@ class GeminiService:
         extracted_pref = "UNSPECIFIED"
         if any(phrase in normalized for phrase in ["normal bill", "cash bill", "bina tax", "kachha", "bina gst"]):
             extracted_pref = "RETAIL_CASH_INVOICE"
-        elif any(phrase in normalized for phrase in ["gst lagana", "tax invoice", "gst bill", "tax bill", "company ka bill", "gst number"]):
+        elif any(phrase in normalized for phrase in ["gst lagana", "tax invoice", "gst bill", "tax bill", "company ka bill", "gst number", "gst invoice"]):
             extracted_pref = "GST_TAX_INVOICE"
 
         # Check hardcoded test match patterns first for predictable test behavior

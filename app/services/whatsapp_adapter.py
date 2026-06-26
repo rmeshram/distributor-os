@@ -55,7 +55,10 @@ def adapt_to_canonical(payload: typing.Any) -> CanonicalWhatsAppMessage:
     # 2. If it's a dictionary
     if isinstance(payload, dict):
         # Case A: Nested Meta/Simulator payload format
+        # LEGACY_META_CODE_START
         if "entry" in payload:
+            logger.warning("Meta nested array payload received but Meta Integration is disabled/deprecated.")
+            # Bypass warning and parse nested dictionary to preserve legacy test compatibility
             try:
                 entry = payload.get("entry", [])
                 if entry and isinstance(entry, list) and len(entry) > 0:
@@ -99,6 +102,7 @@ def adapt_to_canonical(payload: typing.Any) -> CanonicalWhatsAppMessage:
                             )
             except Exception as e:
                 logger.error("Failed to adapt nested dictionary in webhook payload: %s", str(e))
+        # LEGACY_META_CODE_END
 
         # Case B: Flat dictionary format
         tenant_id_raw = payload.get("tenant_id")
@@ -117,6 +121,7 @@ def adapt_to_canonical(payload: typing.Any) -> CanonicalWhatsAppMessage:
     raise ValueError("Unsupported webhook payload format")
 
 
+# LEGACY_META_CODE_START
 def send_whatsapp_message(
     db: Session,
     tenant_id: uuid.UUID,
@@ -126,43 +131,7 @@ def send_whatsapp_message(
     """
     Sends a WhatsApp message using Meta Graph API with dynamic multi-tenant credentials.
     """
-    # 1. Fetch tenant from database
-    tenant = db.query(DistributorTenant).filter_by(id=tenant_id).first()
-    
-    # 2. Resolve credentials (dynamic fallback to env)
-    access_token = None
-    phone_number_id = None
-    if tenant:
-        access_token = tenant.whatsapp_access_token
-        phone_number_id = tenant.whatsapp_phone_id
-        
-    if not access_token:
-        access_token = os.getenv("WHATSAPP_ACCESS_TOKEN")
-    if not phone_number_id:
-        phone_number_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
-        
-    if not access_token or not phone_number_id:
-        logger.error("Missing WhatsApp credentials for tenant %s. Cannot send message.", tenant_id)
-        raise ValueError("Missing WhatsApp credentials (access token or phone number ID)")
-
-    url = f"https://graph.facebook.com/v18.0/{phone_number_id}/messages"
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "messaging_product": "whatsapp",
-        "recipient_type": "individual",
-        "to": to_phone,
-        "type": "text",
-        "text": {
-            "preview_url": False,
-            "body": message_text
-        }
-    }
-    
-    logger.info("Sending WhatsApp message via Meta Graph API for tenant %s to %s", tenant_id, to_phone)
-    response = requests.post(url, json=payload, headers=headers, timeout=10)
-    response.raise_for_status()
-    return response.json()
+    logger.error("Meta Graph API message sending is disabled.")
+    raise RuntimeError("Meta Graph API integration is legacy/disabled. Please use the new Evolution API Flow.")
+# LEGACY_META_CODE_END
 
