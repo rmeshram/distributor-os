@@ -108,7 +108,7 @@ export default function OrdersPage() {
     } else {
       setEditedLineItems([]);
     }
-  }, [selectedOrderId]);
+  }, [selectedOrder]);
 
   const showToast = (message: string, type: "success" | "error") => {
     setToast({ show: true, message, type });
