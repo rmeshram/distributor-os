@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, ForeignKey, Integer, Numeric, DateTime, JSON, select, desc
+from sqlalchemy import String, ForeignKey, Integer, Numeric, DateTime, JSON, select, desc, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship, object_session
 from sqlalchemy.ext.hybrid import hybrid_property
 from app.database import Base, TenantMixin
@@ -15,6 +15,7 @@ class Order(Base, TenantMixin):
     invoice_type: Mapped[str] = mapped_column(String(50), nullable=False, default="UNSPECIFIED")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    raw_source_text: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
 
     @hybrid_property
     def customer_mobile(self) -> str:

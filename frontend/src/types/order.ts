@@ -18,4 +18,5 @@ export interface Order {
   payment_status: string;
   amount_paid: number;
   invoice_type: InvoiceType;
+  raw_source_text?: string;
 }

@@ -31,6 +31,7 @@ class OrderResponse(BaseModel):
     payment_status: str
     amount_paid: float
     invoice_type: str
+    raw_source_text: str | None = None
 
 
 class AllocatedPayment(BaseModel):
@@ -49,6 +50,7 @@ class OrderDetailResponse(BaseModel):
     amount_paid: float
     payments_allocated: list[AllocatedPayment]
     invoice_type: str
+    raw_source_text: str | None = None
 
 
 from reportlab.lib.pagesizes import letter
@@ -121,7 +123,8 @@ def list_orders(
             "eta": o.created_at.strftime("%d %b, %Y %I:%M %p"),
             "payment_status": payment_status,
             "amount_paid": amount_paid,
-            "invoice_type": o.invoice_type
+            "invoice_type": o.invoice_type,
+            "raw_source_text": o.raw_source_text
         })
 
     return results
@@ -929,7 +932,8 @@ def get_order_by_id(
         "payment_status": order.payment_status if order.payment_status != "UNPAID" else (invoice.payment_status if invoice else "UNPAID"),
         "amount_paid": float(invoice.amount_paid) if invoice else 0.0,
         "payments_allocated": payments_allocated,
-        "invoice_type": order.invoice_type
+        "invoice_type": order.invoice_type,
+        "raw_source_text": order.raw_source_text
     }
 
 

@@ -498,7 +498,8 @@ class IngestionService:
             source="WhatsApp",
             customer_id=customer.id,
             invoice_type=parsed_order.extracted_invoice_preference,
-            created_at=datetime.utcnow()
+            created_at=datetime.utcnow(),
+            raw_source_text=message_text
         )
         new_order.status = "pending_review" if has_unmatched else "Draft"
         db.add(new_order)

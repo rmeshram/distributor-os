@@ -32,6 +32,7 @@ class RecentOrderResponse(BaseModel):
     created_on: str
     eta: str
     invoice_type: str
+    raw_source_text: str | None = None
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -284,7 +285,8 @@ def get_recent_orders(
             "status": status_resolved,
             "created_on": o.created_at.strftime("%d %b, %I:%M %p"),
             "eta": o.created_at.strftime("%d %b, %I:%M %p"),
-            "invoice_type": o.invoice_type
+            "invoice_type": o.invoice_type,
+            "raw_source_text": o.raw_source_text
         })
 
     return results
@@ -314,7 +316,8 @@ def get_order_details(
             "pack_size": prod.pack_size if prod else "1 Unit",
             "quantity": item.quantity,
             "unit_price": float(item.unit_price),
-            "total_price": float(item.quantity * item.unit_price)
+            "total_price": float(item.quantity * item.unit_price),
+            "raw_source_text": order.raw_source_text
         })
     return details
 

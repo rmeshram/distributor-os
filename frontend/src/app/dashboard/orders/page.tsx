@@ -28,6 +28,7 @@ interface OrderItem {
   quantity: number;
   unit_price: number;
   total_price: number;
+  raw_source_text?: string;
 }
 
 interface OrderRow {
@@ -42,6 +43,7 @@ interface OrderRow {
   payment_status: string;
   amount_paid: number;
   invoice_type: InvoiceType;
+  raw_source_text?: string;
 }
 
 export default function OrdersPage() {
@@ -776,6 +778,16 @@ export default function OrdersPage() {
                       </div>
                     </div>
                   </div>
+
+                  {selectedOrder?.raw_source_text && (
+                    <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-sm text-gray-700 italic my-3 flex items-start gap-2">
+                      <MessageSquare className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                      <div>
+                        <span className="font-bold text-xs text-slate-500 uppercase not-italic block mb-0.5">Original Message:</span>
+                        "{selectedOrder.raw_source_text}"
+                      </div>
+                    </div>
+                  )}
 
                   <h4 className="font-bold text-slate-800 text-sm border-b pb-2 mb-3">Line Items</h4>
                   {editedLineItems.map((item, idx) => {
