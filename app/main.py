@@ -45,3 +45,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.get("/")
 def read_root():
     return {"status": "healthy", "service": "Distributor OS Backend Core"}
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
