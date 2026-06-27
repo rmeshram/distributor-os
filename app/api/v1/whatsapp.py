@@ -267,6 +267,14 @@ async def handle_whatsapp_webhook(
                                 from app.services.ingestion_service import IngestionService
                                 IngestionService.invalidate_tenant_cache(tenant.id)
                                 logger.info("Auto-synced distributor phone %s and phone ID %s for tenant %s using new DB session", normalized_phone, instance_name, tenant.id)
+                                
+                                try:
+                                    from app.services.gateway_service import EvolutionGatewayService
+                                    service = EvolutionGatewayService()
+                                    await service.configure_webhook(instance_name)
+                                    logger.info("Successfully re-configured webhook for instance %s on connection open", instance_name)
+                                except Exception as webhook_exc:
+                                    logger.error("Failed to re-configure webhook for instance %s on connection open: %s", instance_name, str(webhook_exc))
                         except Exception as db_exc:
                             new_db.rollback()
                             logger.error("DB error auto-syncing distributor phone: %s", str(db_exc))
