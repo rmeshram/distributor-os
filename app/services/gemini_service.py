@@ -23,12 +23,12 @@ class ParsedOrderItem(BaseModel):
 
 class AntigravityParsedOrder(BaseModel):
     items: List[ParsedOrderItem]
-    extracted_invoice_preference: typing.Literal["GST_TAX_INVOICE", "RETAIL_CASH_INVOICE", "UNSPECIFIED"] = "UNSPECIFIED"
+    extracted_invoice_preference: typing.Literal["GST_TAX_INVOICE", "RETAIL_CASH_INVOICE", "UNSPECIFIED"]
 
 # Preserved for backward compatibility with your other imports
 class ParsedOrder(BaseModel):
     items: List[ParsedOrderItem]
-    extracted_invoice_preference: typing.Literal["GST_TAX_INVOICE", "RETAIL_CASH_INVOICE", "UNSPECIFIED"] = "UNSPECIFIED"
+    extracted_invoice_preference: typing.Literal["GST_TAX_INVOICE", "RETAIL_CASH_INVOICE", "UNSPECIFIED"]
 
 # ---------------------------------------------------------------------------
 # Core Service
@@ -85,6 +85,8 @@ class GeminiService:
                     )
                     
                     parsed_json = json.loads(response.text)
+                    if "extracted_invoice_preference" not in parsed_json:
+                        parsed_json["extracted_invoice_preference"] = "UNSPECIFIED"
                     return AntigravityParsedOrder(**parsed_json)
 
                 except (google_exceptions.InternalServerError, 

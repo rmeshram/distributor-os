@@ -73,6 +73,8 @@ def process_whatsapp_webhook_payload(
             if str(ve) == "distributor_self_message":
                 logger.info("[Ingestion - %s] Silently dropping distributor self-message (fromMe is True)", correlation_id)
                 return {"status": "ignored", "reason": "distributor_self_message"}
+            if str(ve) == "non_customer_chat":
+                return {"status": "ignored", "reason": "non_customer_chat"}
             raise
         canonical_msg.correlation_id = correlation_id
         logger.info(
@@ -246,12 +248,17 @@ async def handle_whatsapp_webhook(
                             normalized_phone = normalize_phone_number(owner_phone)
                             
                             tenant = new_db.query(DistributorTenant).filter(DistributorTenant.whatsapp_phone_id == instance_name).first()
+                            if not tenant and instance_name.startswith("inst-") and len(instance_name) == 13:
+                                short_id = instance_name[5:]
+                                from sqlalchemy import cast, String
+                                tenant = new_db.query(DistributorTenant).filter(cast(DistributorTenant.id, String).like(f"{short_id}%")).first()
                             if tenant:
                                 tenant.whatsapp_order_phone = normalized_phone
+                                tenant.whatsapp_phone_id = instance_name
                                 new_db.commit()
                                 from app.services.ingestion_service import IngestionService
                                 IngestionService.invalidate_tenant_cache(tenant.id)
-                                logger.info("Auto-synced distributor phone %s for tenant %s using new DB session", normalized_phone, tenant.id)
+                                logger.info("Auto-synced distributor phone %s and phone ID %s for tenant %s using new DB session", normalized_phone, instance_name, tenant.id)
                         except Exception as db_exc:
                             new_db.rollback()
                             logger.error("DB error auto-syncing distributor phone: %s", str(db_exc))

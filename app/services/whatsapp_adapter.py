@@ -45,36 +45,12 @@ def adapt_to_canonical(payload: typing.Any) -> CanonicalWhatsAppMessage:
         if isinstance(key, dict):
             remote_jid = key.get("remoteJid")
             if remote_jid:
-                if str(remote_jid).endswith("@lid"):
-                    instance_name = extra_dict.get("instance")
-                    if instance_name:
-                        try:
-                            url = f"http://34.158.60.42:8080/chat/findContacts/{instance_name}"
-                            headers = {
-                                "apikey": "distributorbotkey2026",
-                                "Content-Type": "application/json"
-                            }
-                            body = {"where": {"remoteJid": remote_jid}}
-                            logger.info("Resolving @lid contact via GET: url=%s, body=%s", url, body)
-                            res = requests.get(url, json=body, headers=headers, timeout=5.0)
-                            if res.status_code == 200:
-                                res_data = res.json()
-                                contact = None
-                                if isinstance(res_data, list) and len(res_data) > 0:
-                                    contact = res_data[0]
-                                elif isinstance(res_data, dict):
-                                    contact = res_data
-                                
-                                if isinstance(contact, dict):
-                                    resolved_jid = contact.get("id") or contact.get("jid") or contact.get("remoteJid") or contact.get("number")
-                                    if resolved_jid:
-                                        sender = resolved_jid
-                        except Exception as e:
-                            logger.warning("Failed to resolve @lid from Evolution API: %s", str(e))
-                    
-                    if not sender:
-                        logger.warning("Could not resolve @lid contact %s for instance %s", remote_jid, instance_name)
-                        return "", ""
+                if remote_jid.endswith("@g.us") or remote_jid.endswith("@lid"):
+                    # Check if remoteJidAlt exists and is @s.whatsapp.net
+                    remote_jid_alt = key.get("remoteJidAlt", "")
+                    if not remote_jid_alt.endswith("@s.whatsapp.net"):
+                        raise ValueError("non_customer_chat")
+                    sender = remote_jid_alt
                 else:
                     sender = remote_jid
             
@@ -126,7 +102,7 @@ def adapt_to_canonical(payload: typing.Any) -> CanonicalWhatsAppMessage:
                     if tenant_id is None and "tenant_id" in extra and extra["tenant_id"]:
                         tenant_id = uuid.UUID(str(extra["tenant_id"]))
             except ValueError as ve:
-                if str(ve) == "distributor_self_message":
+                if str(ve) in ("distributor_self_message", "non_customer_chat"):
                     raise
             except Exception as e:
                 logger.error("Failed to adapt model_extra in webhook payload: %s", str(e))
@@ -161,7 +137,7 @@ def adapt_to_canonical(payload: typing.Any) -> CanonicalWhatsAppMessage:
                     message_text=str(ev_msg or "")
                 )
         except ValueError as ve:
-            if str(ve) == "distributor_self_message":
+            if str(ve) in ("distributor_self_message", "non_customer_chat"):
                 raise
 
         # Case A: Nested Meta/Simulator payload format

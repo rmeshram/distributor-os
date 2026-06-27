@@ -536,6 +536,7 @@ def test_whatsapp_webhook_lid_sender_and_tenant_resolution(db_session, client, m
         "data": {
             "key": {
                 "remoteJid": "234204700877007@lid",
+                "remoteJidAlt": "919078158448@s.whatsapp.net",
                 "fromMe": False,
                 "id": "wamid.123"
             },
@@ -552,6 +553,73 @@ def test_whatsapp_webhook_lid_sender_and_tenant_resolution(db_session, client, m
     data = response.json()
     assert data["status"] == "success"
     assert data["successful_rows"] == 1
+
+
+def test_whatsapp_webhook_non_customer_chat_ignored(client):
+    # Group chat JID
+    payload = {
+        "event": "messages.upsert",
+        "instance": "test-instance",
+        "data": {
+            "key": {
+                "remoteJid": "1234567890@g.us",
+                "fromMe": False,
+                "id": "wamid.123"
+            },
+            "message": {
+                "conversation": "Need 50 HUL Soap"
+            }
+        }
+    }
+    response = client.post("/api/v1/whatsapp/webhook", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ignored"
+    assert data["reason"] == "non_customer_chat"
+
+
+def test_whatsapp_webhook_connection_open_auto_sync_phone_id(db_session, client, monkeypatch):
+    # Setup Tenant without whatsapp_phone_id
+    tenant = DistributorTenant(name="Auto Onboard Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    
+    # Instance name starts with inst- and has first 8 chars of tenant.id
+    instance_name = f"inst-{str(tenant.id)[:8]}"
+    
+    # Mock fetchInstances response
+    class MockGetResponse:
+        def __init__(self, status_code, json_data):
+            self.status_code = status_code
+            self._json_data = json_data
+        def json(self):
+            return self._json_data
+
+    import httpx
+    async def mock_get(self_client, url, headers=None, timeout=None):
+        return MockGetResponse(200, [{"instanceName": instance_name, "ownerJid": "919078158448@s.whatsapp.net"}])
+        
+    monkeypatch.setattr(httpx.AsyncClient, "get", mock_get)
+    monkeypatch.setattr("app.api.v1.whatsapp.SessionLocal", lambda: db_session)
+
+    payload = {
+        "event": "connection.update",
+        "instance": instance_name,
+        "data": {
+            "state": "open"
+        }
+    }
+    response = client.post("/api/v1/whatsapp/webhook", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "SUCCESS"
+    
+    # Verify DB update in a fresh query
+    db_session.expire_all()
+    updated_tenant = db_session.query(DistributorTenant).filter_by(id=tenant.id).one()
+    assert updated_tenant.whatsapp_order_phone == "+919078158448"
+    assert updated_tenant.whatsapp_phone_id == instance_name
+
 
 
 
