@@ -269,29 +269,26 @@ export default function OrdersPage() {
     }
   };
 
-  const handleLocalResolveItem = (itemId: string, productId: string) => {
-    const targetProduct = productsList.find(p => p.id === productId);
-    if (!targetProduct) return;
-
-    // Write mutation directly to local staged memory — no network call made here
-    setEditedLineItems(prevItems =>
-      prevItems.map(item => {
-        if (item.id === itemId) {
-          return {
-            ...item,
-            product_id: targetProduct.id,
-            sku_id: targetProduct.sku_id,
-            brand: targetProduct.brand,
-            category: targetProduct.category,
-            pack_size: targetProduct.pack_size,
-            unit_price: targetProduct.base_price,
-            total_price: item.quantity * targetProduct.base_price,
-            isResolvedLocally: true,
-            resolvedSkuCode: targetProduct.sku_id,
-          };
-        }
-        return item;
-      })
+  const handleProductChange = (itemId: string, selectedProductId: string) => {
+    const targetProduct = productsList.find(p => p.id === selectedProductId);
+    setEditedLineItems((prevItems) =>
+      prevItems.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              product_id: selectedProductId,
+              unmatched_raw_text: null,
+              sku_id: targetProduct ? targetProduct.sku_id : item.sku_id,
+              brand: targetProduct ? targetProduct.brand : item.brand,
+              category: targetProduct ? targetProduct.category : item.category,
+              pack_size: targetProduct ? targetProduct.pack_size : item.pack_size,
+              unit_price: targetProduct ? targetProduct.base_price : item.unit_price,
+              total_price: targetProduct ? item.quantity * targetProduct.base_price : item.total_price,
+              isResolvedLocally: true,
+              resolvedSkuCode: targetProduct ? targetProduct.sku_id : undefined,
+            }
+          : item
+      )
     );
   };
 
@@ -813,11 +810,7 @@ export default function OrdersPage() {
                                 <label className="block text-[10px] font-bold text-slate-400 uppercase">Map to Catalog SKU</label>
                                 <select
                                   value={item.product_id || ""}
-                                  onChange={(e) => {
-                                    if (e.target.value) {
-                                      handleLocalResolveItem(item.id, e.target.value);
-                                    }
-                                  }}
+                                  onChange={(e) => handleProductChange(item.id, e.target.value)}
                                   className="w-full mt-1 p-2 border border-rose-200 rounded-lg text-xs bg-white text-slate-700 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer animate-pulse"
                                 >
                                   <option value="">-- Select SKU --</option>
