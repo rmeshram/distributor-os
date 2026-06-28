@@ -891,3 +891,72 @@ def test_record_delivery_event(db_session, client):
     assert order.delivery_source == "manual"
     assert order.delivered_at is not None
 
+
+def test_orders_list_query_count_regression(db_session, client):
+    from sqlalchemy import event
+    
+    # Setup Tenant
+    tenant = DistributorTenant(name="Query Count Test Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # Helper to create an order
+    def create_mock_order(idx):
+        cust = Customer(
+            retailer_name=f"Retailer {idx}", customer_id=f"C-Q-{idx}", address_text="Address",
+            gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+        )
+        db_session.add(cust)
+        db_session.flush()
+
+        order = Order(
+            tenant_id=tenant.id,
+            internal_order_id=f"ORD-QC-{idx}",
+            source="Portal",
+            customer_id=cust.id,
+            status="Draft"
+        )
+        db_session.add(order)
+        db_session.flush()
+        
+        db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Draft", updated_by="admin"))
+        db_session.commit()
+        return order
+
+    # Create 1 order
+    create_mock_order(1)
+
+    queries_count_1 = 0
+    @event.listens_for(db_session.bind, "after_cursor_execute")
+    def receive_after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        nonlocal queries_count_1
+        queries_count_1 += 1
+
+    # Call list endpoint
+    resp = client.get(f"/api/v1/orders?tenant_id={tenant.id}")
+    assert resp.status_code == 200
+    
+    # Remove listener
+    event.remove(db_session.bind, "after_cursor_execute", receive_after_cursor_execute)
+
+    # Create 4 more orders (total 5)
+    for i in range(2, 6):
+        create_mock_order(i)
+
+    queries_count_5 = 0
+    @event.listens_for(db_session.bind, "after_cursor_execute")
+    def receive_after_cursor_execute_5(conn, cursor, statement, parameters, context, executemany):
+        nonlocal queries_count_5
+        queries_count_5 += 1
+
+    # Call list endpoint again
+    resp = client.get(f"/api/v1/orders?tenant_id={tenant.id}")
+    assert resp.status_code == 200
+
+    event.remove(db_session.bind, "after_cursor_execute", receive_after_cursor_execute_5)
+
+    # Assert query count remains bounded (constant query complexity, not O(N))
+    assert queries_count_5 <= queries_count_1 + 1
+

@@ -42,6 +42,20 @@ from fastapi.staticfiles import StaticFiles
 os.makedirs("static", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
+@app.on_event("startup")
+def startup_event():
+    if os.getenv("SEED_DEMO_DATA", "false").lower() == "true":
+        from app.database import SessionLocal
+        from app.services.demo_service import ensure_demo_data
+        from app.services.tenant_service import DEMO_TENANT_ID
+        db = SessionLocal()
+        try:
+            ensure_demo_data(db, DEMO_TENANT_ID)
+        finally:
+            db.close()
+
+
 @app.get("/")
 def read_root():
     return {"status": "healthy", "service": "Distributor OS Backend Core"}

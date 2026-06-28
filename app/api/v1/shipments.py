@@ -12,7 +12,6 @@ from app.models.shipment import Shipment
 from app.models.invoice import Invoice
 from app.models.user import User
 from app.services.tenant_service import resolve_tenant_id
-from app.services.demo_service import ensure_demo_data
 
 
 router = APIRouter(prefix="/shipments", tags=["Shipments"])
@@ -34,7 +33,6 @@ def get_pending_shipments(
     db: Session = Depends(get_db)
 ):
     extracted_tenant_id = resolve_tenant_id(None, access_token, authorization)
-    ensure_demo_data(db, extracted_tenant_id)
     tenant_context.set(extracted_tenant_id)
 
     # 1. Confirmed orders subquery
@@ -102,7 +100,6 @@ def get_active_shipments(
     db: Session = Depends(get_db)
 ):
     extracted_tenant_id = resolve_tenant_id(None, access_token, authorization)
-    ensure_demo_data(db, extracted_tenant_id)
     tenant_context.set(extracted_tenant_id)
 
     shipments = db.query(Shipment).filter(Shipment.tenant_id == extracted_tenant_id).all()
@@ -164,7 +161,6 @@ def create_shipment(
     db: Session = Depends(get_db)
 ):
     extracted_tenant_id = resolve_tenant_id(None, access_token, authorization)
-    ensure_demo_data(db, extracted_tenant_id)
     tenant_context.set(extracted_tenant_id)
 
     driver = db.get(User, payload.driver_id)
@@ -210,6 +206,7 @@ def create_shipment(
             to_status="Dispatched",
             updated_by="back_office"
         ))
+        order.status = "Dispatched"
         created_shipments.append(new_shipment)
 
     db.commit()
@@ -289,6 +286,7 @@ def update_shipment_status(
             to_status=payload.status,
             updated_by=payload.source
         ))
+        order.status = payload.status
 
         # Update order.delivered_at and order.delivery_source if status is delivered/completed
         if payload.status.upper() in ("DELIVERED", "COMPLETED"):

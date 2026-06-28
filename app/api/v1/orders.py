@@ -72,9 +72,7 @@ def list_orders(
     Returns all orders for a tenant.
     """
     from app.services.tenant_service import resolve_tenant_id
-    from app.services.demo_service import ensure_demo_data
     resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
-    ensure_demo_data(db, resolved_tenant_id)
     tenant_context.set(resolved_tenant_id)
     from sqlalchemy import select
 
@@ -109,7 +107,7 @@ def list_orders(
         status_resolved = "Pending" if status_raw == "Draft" else ("Needs Review" if status_raw in ["NEEDS_REVIEW", "pending_review"] else status_raw)
 
         # Payment status attributes
-        payment_status = o.payment_status if o.payment_status != "UNPAID" else (inv.payment_status if inv else "UNPAID")
+        payment_status = inv.payment_status if inv else "UNPAID"
         amount_paid = float(inv.amount_paid) if inv else 0.0
 
         results.append({
@@ -305,6 +303,7 @@ def update_order_status(
             to_status=payload.to_status,
             updated_by="system_orders_agent"
         ))
+        order.status = payload.to_status
 
         db.commit()
         return {
@@ -395,6 +394,7 @@ def resolve_order_item(
             to_status=new_status,
             updated_by="operator"
         ))
+        order.status = new_status
 
     db.commit()
     
@@ -1012,6 +1012,7 @@ def create_order(
         to_status=payload.status,
         updated_by="operator"
     ))
+    new_order.status = payload.status
 
     if payload.status == "Confirmed":
         customer = db.get(Customer, payload.customer_id)
@@ -1210,6 +1211,7 @@ def create_order_generic(payload: IngestionOrderPayload, db: Session = Depends(g
         to_status="Draft",
         updated_by="API"
     ))
+    new_order.status = "Draft"
     db.commit()
 
     return {"status": "success", "order_id": str(order_id)}
@@ -1231,6 +1233,7 @@ def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
         to_status="Confirmed",
         updated_by="API"
     ))
+    order.status = "Confirmed"
     
     # Also log DEBIT and generate Invoice as standard confirmation does to support FIFO payment collect
     customer = db.get(Customer, order.customer_id)
@@ -1458,6 +1461,7 @@ def batch_confirm_order(
                 updated_by="API",
             )
         )
+        order.status = "Confirmed"
 
         db.commit()
 
@@ -1579,6 +1583,7 @@ def dispatch_order_post(order_id: uuid.UUID, payload: DispatchPayload, db: Sessi
             to_status="Dispatched",
             updated_by="operator"
         ))
+        order.status = "Dispatched"
     else:
         if hasattr(order, "status"):
             setattr(order, "status", "Dispatched")
@@ -1668,6 +1673,7 @@ def record_delivery_event(
             to_status="Delivered",
             updated_by=payload.source
         ))
+        order.status = "Delivered"
     else:
         if hasattr(order, "status"):
             setattr(order, "status", "Delivered")

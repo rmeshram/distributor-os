@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, ForeignKey, Integer, Numeric, DateTime, JSON, select, desc, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship, object_session
+from sqlalchemy import String, ForeignKey, Integer, Numeric, DateTime, JSON, select, desc, Text, event
+from sqlalchemy.orm import Mapped, mapped_column, relationship, object_session, Session
 from sqlalchemy.ext.hybrid import hybrid_property
 from app.database import Base, TenantMixin
 
@@ -18,6 +18,7 @@ class Order(Base, TenantMixin):
     raw_source_text: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     delivery_source: Mapped[str | None] = mapped_column(String(100), nullable=True, default=None)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="Draft")
 
     @hybrid_property
     def customer_mobile(self) -> str:
@@ -62,33 +63,14 @@ class Order(Base, TenantMixin):
 
     @property
     def current_status(self) -> str:
-        """
-        Dynamically fetches the current order status by checking the latest transition in the OrderStateLedger.
-        Defaults to 'Draft' if no ledger entries exist.
-        """
-        session = object_session(self)
-        if session is not None:
-            # Query the database for the most recent ledger entry
-            stmt = (
-                select(OrderStateLedger.to_status)
-                .where(OrderStateLedger.order_id == self.id)
-                .order_by(desc(OrderStateLedger.timestamp))
-                .limit(1)
-            )
-            res = session.execute(stmt).scalar()
-            if res:
-                if res in ("NEEDS_REVIEW", "pending_review"):
-                    return "Needs Review"
-                return res
+        val = self.status
+        if val in ("NEEDS_REVIEW", "pending_review"):
+            return "Needs Review"
+        return val or "Draft"
 
-        # Fallback to in-memory collection if session is not available or query returns empty
-        if self.ledger_entries:
-            sorted_entries = sorted(self.ledger_entries, key=lambda e: e.timestamp, reverse=True)
-            val = sorted_entries[0].to_status
-            if val in ("NEEDS_REVIEW", "pending_review"):
-                return "Needs Review"
-            return val
-        return "Draft"
+    @current_status.setter
+    def current_status(self, value: str):
+        self.status = value
 
 class OrderLineItem(Base, TenantMixin):
     __tablename__ = "order_line_items"
@@ -127,4 +109,13 @@ class BulkJob(Base):
     result_link: Mapped[str | None] = mapped_column(String(255), nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+@event.listens_for(Session, "before_flush")
+def before_flush(session, flush_context, instances):
+    for obj in session.new | session.dirty:
+        if isinstance(obj, OrderStateLedger):
+            order = session.get(Order, obj.order_id)
+            if order:
+                order.status = obj.to_status
 

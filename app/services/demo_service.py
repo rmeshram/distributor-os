@@ -137,7 +137,8 @@ def ensure_demo_data(db: Session, tenant_id: uuid.UUID | None = None):
             internal_order_id=o["ord_id"],
             source=o["source"],
             customer_id=uuid.UUID(o["cust_id"]) if isinstance(o["cust_id"], str) else o["cust_id"],
-            created_at=datetime.utcnow() - timedelta(minutes=o["time_offset"])
+            created_at=datetime.utcnow() - timedelta(minutes=o["time_offset"]),
+            status=o["status"]
         )
         db.add(order)
         db.flush()
