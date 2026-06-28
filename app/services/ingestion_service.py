@@ -648,7 +648,7 @@ class IngestionService:
                     )
                     # Check if at least one line item is matched
                     has_matched = any(
-                        item.sku_id != "UNMATCHED_SKU" and item.unit_price > 0
+                        item.product_id is not None and float(item.unit_price) > 0
                         for item in order_val.line_items
                     )
                     if not has_matched:

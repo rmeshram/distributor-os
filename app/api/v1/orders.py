@@ -1540,7 +1540,11 @@ def dispatch_order_post(order_id: uuid.UUID, payload: DispatchPayload, db: Sessi
     tenant_context.set(order.tenant_id)
     
     shipment = db.query(Shipment).filter(Shipment.order_id == order_id).first()
-    customer = db.get(Customer, order.customer_id)
+    from app.models.customer import Customer
+    customer = db.query(Customer).filter(
+        Customer.id == order.customer_id,
+        Customer.tenant_id == order.tenant_id
+    ).first()
     dest = customer.address_text if customer else "Unknown Address"
 
     if not shipment:
