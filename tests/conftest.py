@@ -35,6 +35,15 @@ def fixture_db_session(db_engine):
     # Reset tenant context
     tenant_context.set(None)
 
+@pytest.fixture
+def seed_demo_data(db_session):
+    """Opt-in fixture: seeds the demo tenant, customers, products, orders.
+    Use in tests that rely on the standard demo dataset (e.g. dashboard)."""
+    from app.services.demo_service import ensure_demo_data
+    from app.services.tenant_service import DEMO_TENANT_ID
+    ensure_demo_data(db_session, DEMO_TENANT_ID)
+    return DEMO_TENANT_ID
+
 @pytest.fixture(autouse=True)
 def override_get_db(db_session):
     from app.main import app

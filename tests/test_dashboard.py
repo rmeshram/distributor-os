@@ -14,7 +14,7 @@ from app.database import tenant_context
 def fixture_client():
     return TestClient(app)
 
-def test_dashboard_api_endpoints(db_session, client):
+def test_dashboard_api_endpoints(db_session, client, seed_demo_data):
     # The default tenant ID used by the seeder is:
     demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
 
@@ -71,7 +71,7 @@ def test_dashboard_api_endpoints(db_session, client):
     assert "ORD-2505-1482" in activity[0]["message"]
 
 
-def test_dashboard_metrics_date_filtering(db_session, client):
+def test_dashboard_metrics_date_filtering(db_session, client, seed_demo_data):
     demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
     
     # 1. Call metrics with dates that filter orders
@@ -107,7 +107,7 @@ def test_dashboard_tenant_validation_guardrails(client):
     assert "Session expired or token missing" in resp.json()["detail"]
 
 
-def test_dashboard_overview_endpoint(db_session, client):
+def test_dashboard_overview_endpoint(db_session, client, seed_demo_data):
     demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
 
     # Call overview endpoint
