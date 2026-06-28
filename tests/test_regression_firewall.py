@@ -209,3 +209,110 @@ def test_fifo_payment_cascade(db_session, setup_unpaid_orders):
     
     order_2 = db_session.query(Order).get(order_2_id)
     assert order_2.payment_status == "PARTIALLY_PAID"
+
+
+def test_partial_allocation_on_batch_confirm(db_session, setup_test_catalog):
+    """
+    Verifies that calling POST /orders/{id}/batch-confirm correctly:
+    - Sets allocated_quantity == 125 on the line item
+    - Reduces inventory.quantity_on_hand to 0
+    - Creates a DemandGap with gap_qty == 775
+    - Creates an Invoice with total_amount == 125 * unit_price (1250)
+    - Sets order.total_amount == 125 * unit_price (1250)
+    """
+    from app.models.product import Product
+    from app.models.inventory import Inventory
+    from app.models.order import OrderLineItem, OrderStateLedger
+    from app.models.demand_gap import DemandGap
+    from app.models.invoice import Invoice
+    from app.models.customer import Customer
+    import uuid
+
+    # 1. Fetch catalog setups
+    tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+    cust = db_session.query(Customer).filter_by(tenant_id=tenant_id).first()
+    assert cust is not None
+
+    # 2. Create product with 125 units in inventory
+    product = Product(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        sku_id="PROD-BATCH-1",
+        brand="HUL",
+        category="Soap",
+        pack_size="1 unit",
+        base_price=10.0,
+        stock_quantity=125
+    )
+    db_session.add(product)
+    db_session.flush()
+
+    inv = Inventory(
+        tenant_id=tenant_id,
+        sku_id=product.id,
+        location="WH1",
+        quantity_on_hand=125,
+        low_stock_threshold=10
+    )
+    db_session.add(inv)
+    db_session.flush()
+
+    # 3. Create order for 900 units
+    order = Order(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        internal_order_id="ORD-BATCH-TEST-1",
+        source="Portal",
+        customer_id=cust.id
+    )
+    db_session.add(order)
+    db_session.flush()
+
+    db_session.add(OrderStateLedger(
+        tenant_id=tenant_id,
+        order_id=order.id,
+        from_status=None,
+        to_status="Draft",
+        updated_by="test"
+    ))
+    db_session.add(OrderLineItem(
+        tenant_id=tenant_id,
+        order_id=order.id,
+        product_id=product.id,
+        quantity=900,
+        unit_price=10.0
+    ))
+    db_session.commit()
+
+    # 4. Call batch-confirm API
+    response = client.post(
+        f"/api/v1/orders/{order.id}/batch-confirm",
+        json={"resolved_items": []}
+    )
+    assert response.status_code == 200
+
+    # 5. Verify assertions
+    db_session.expire_all()
+    
+    # - allocated_quantity == 125 on the line item
+    item_db = db_session.query(OrderLineItem).filter_by(order_id=order.id).one()
+    assert item_db.allocated_quantity == 125
+
+    # - inventory.quantity_on_hand == 0
+    inv_db = db_session.query(Inventory).filter_by(sku_id=product.id).one()
+    assert inv_db.quantity_on_hand == 0
+    assert inv_db.quantity_committed == 125
+
+    # - DemandGap exists with gap_qty == 775
+    gap_db = db_session.query(DemandGap).filter_by(order_id=order.id).one()
+    assert gap_db.gap_qty == 775
+    assert float(gap_db.revenue_at_risk) == 7750.0
+
+    # - Invoice total_amount == 125 * unit_price (1250)
+    invoice_db = db_session.query(Invoice).filter_by(order_id=order.id).one()
+    assert float(invoice_db.total_amount) == 1250.0
+
+    # - order.total_amount == 125 * unit_price (1250)
+    order_db = db_session.query(Order).filter_by(id=order.id).one()
+    assert order_db.total_amount == 1250.0
+
