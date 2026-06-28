@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header
 from pydantic import BaseModel
 from sqlalchemy import func, select, and_
@@ -6,6 +7,7 @@ from sqlalchemy.orm import Session, aliased
 from app.database import get_db, tenant_context
 from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.customer import Customer
+from app.models.tenant import DistributorTenant
 from app.models.shipment import Shipment
 from app.models.invoice import Invoice
 from app.models.user import User
@@ -211,6 +213,56 @@ def create_shipment(
         created_shipments.append(new_shipment)
 
     db.commit()
+
+    # Fire order_dispatched notifications (non-blocking)
+    for s in created_shipments:
+        try:
+            order_obj = db.get(Order, s.order_id)
+            if order_obj:
+                customer_obj = db.query(Customer).filter(
+                    Customer.id == order_obj.customer_id,
+                    Customer.tenant_id == order_obj.tenant_id
+                ).first()
+                
+                tenant_obj = db.get(DistributorTenant, order_obj.tenant_id)
+                
+                if customer_obj and tenant_obj:
+                    for item in order_obj.line_items:
+                        if item.product:
+                            _ = item.product.brand
+                            
+                    import asyncio
+                    from app.services.notification_service import NotificationService
+                    import os
+
+                    async def fire_dispatched_notification(t_val, c_val, o_val):
+                        try:
+                            notification_service = NotificationService(
+                                evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
+                                api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
+                            )
+                            await notification_service.notify(
+                                event="order_dispatched",
+                                tenant=t_val,
+                                customer=c_val,
+                                order=o_val,
+                                db=db
+                            )
+                        except Exception as inner_ex:
+                            pass
+
+                    try:
+                        loop = asyncio.get_running_loop()
+                    except RuntimeError:
+                        loop = None
+
+                    if loop and loop.is_running():
+                        loop.create_task(fire_dispatched_notification(tenant_obj, customer_obj, order_obj))
+                    else:
+                        asyncio.run(fire_dispatched_notification(tenant_obj, customer_obj, order_obj))
+        except Exception as e:
+            pass
+
     return {"status": "success", "count": len(created_shipments)}
 
 @router.patch("/{shipment_id}/status")
@@ -238,7 +290,60 @@ def update_shipment_status(
             updated_by=payload.source
         ))
 
+        # Update order.delivered_at and order.delivery_source if status is delivered/completed
+        if payload.status.upper() in ("DELIVERED", "COMPLETED"):
+            order.delivered_at = datetime.utcnow()
+            order.delivery_source = payload.source
+
     db.commit()
+
+    # Fire order_delivered notification if status is delivered/completed (non-blocking)
+    if payload.status.upper() in ("DELIVERED", "COMPLETED") and order:
+        try:
+            customer_obj = db.query(Customer).filter(
+                Customer.id == order.customer_id,
+                Customer.tenant_id == order.tenant_id
+            ).first()
+            
+            tenant_obj = db.get(DistributorTenant, order.tenant_id)
+            
+            if customer_obj and tenant_obj:
+                for item in order.line_items:
+                    if item.product:
+                        _ = item.product.brand
+                        
+                import asyncio
+                from app.services.notification_service import NotificationService
+                import os
+
+                async def fire_delivered_notification(t_val, c_val, o_val):
+                    try:
+                        notification_service = NotificationService(
+                            evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
+                            api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
+                        )
+                        await notification_service.notify(
+                            event="order_delivered",
+                            tenant=t_val,
+                            customer=c_val,
+                            order=o_val,
+                            db=db
+                        )
+                    except Exception as inner_ex:
+                        pass
+
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = None
+
+                if loop and loop.is_running():
+                    loop.create_task(fire_delivered_notification(tenant_obj, customer_obj, order))
+                else:
+                    asyncio.run(fire_delivered_notification(tenant_obj, customer_obj, order))
+        except Exception as e:
+            pass
+
     return {
         "status": "success",
         "shipment_id": str(shipment.id),
