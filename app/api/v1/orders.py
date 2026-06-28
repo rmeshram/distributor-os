@@ -19,6 +19,17 @@ from app.models.demand_gap import DemandGap
 
 logger = logging.getLogger(__name__)
 
+# Dynamically override Order.total_amount property to support setter operations in API
+original_total_amount_getter = Order.total_amount.fget
+def get_total_amount(self):
+    if hasattr(self, "_total_amount") and self._total_amount is not None:
+        return self._total_amount
+    return original_total_amount_getter(self)
+def set_total_amount(self, value):
+    self._total_amount = value
+Order.total_amount = property(get_total_amount, set_total_amount)
+
+
 
 class OrderResponse(BaseModel):
     id: str
@@ -288,6 +299,7 @@ def update_order_status(
                 # Decrement inventory only by what was actually allocated
                 if inv_record and allocated > 0:
                     inv_record.quantity_on_hand -= allocated
+                    inv_record.quantity_committed = (inv_record.quantity_committed or 0) + allocated
 
             # 6. Recompute billing total using allocated quantities (not original quantities).
             billing_total = sum(
@@ -297,6 +309,7 @@ def update_order_status(
                 )
                 for item in items
             )
+            order.total_amount = billing_total
 
             # Update Customer outstanding balance
             customer.outstanding_balance = float(customer.outstanding_balance) + billing_total
@@ -362,6 +375,38 @@ def update_order_status(
             status_code=500,
             detail=f"Status update transaction crash: {str(e)}"
         )
+
+# ─────────────────────────────────────────────────────────────────
+# FUTURE USE: Call restore_inventory_for_order(db, order) from any
+# cancel or reject endpoint when order.status == "Confirmed".
+# Do not call this function from anywhere until cancel/reject
+# order UI and endpoint is built.
+# ─────────────────────────────────────────────────────────────────
+
+# INVENTORY_DEDUCTION_TRIGGER = "on_confirmation"  # Options: "on_confirmation" | "on_dispatch"
+# Change this flag when business logic changes. Currently: inventory deducted on confirmation.
+
+def restore_inventory_for_order(db: Session, order: Order) -> None:
+    """
+    Restores inventory when a confirmed order is cancelled or rejected.
+    Call this from any cancel/reject endpoint ONLY if order.status == "Confirmed".
+    
+    If INVENTORY_DEDUCTION_TRIGGER changes to "on_dispatch" in future,
+    this function should only be called if order.status == "Dispatched".
+    """
+    for item in order.line_items:
+        inv_record = db.query(Inventory).filter(
+            Inventory.tenant_id == order.tenant_id,
+            Inventory.sku_id == item.product_id
+        ).first()
+        if inv_record:
+            restored_qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
+            inv_record.quantity_on_hand += restored_qty
+            inv_record.quantity_committed = max(0, (inv_record.quantity_committed or 0) - restored_qty)
+            logger.info(
+                "Inventory restored: product=%s qty=%s for order=%s",
+                item.product_id, restored_qty, order.id
+            )
 
 
 class ItemResolvePayload(BaseModel):
