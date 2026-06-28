@@ -42,6 +42,7 @@ class DashboardOverviewResponse(BaseModel):
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 from app.services.tenant_service import resolve_tenant_id, DEMO_TENANT_ID, get_validated_tenant_id
+from app.services.demo_service import ensure_demo_data
 
 
 
@@ -60,6 +61,8 @@ def get_dashboard_metrics(
     if database is empty, automatically triggers seeder first.
     """
     tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    if str(tenant_id) == "d3b07384-d113-4956-a5d2-64be7357c11d":
+        ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
     # Parse date filters if provided
@@ -261,6 +264,8 @@ def get_recent_orders(
     Returns the latest 5 orders with their status resolved from the ledger.
     """
     tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    if str(tenant_id) == "d3b07384-d113-4956-a5d2-64be7357c11d":
+        ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
     orders = (
@@ -322,6 +327,8 @@ def get_dashboard_overview(
     and collections aging donut data in a single request.
     """
     tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    if str(tenant_id) == "d3b07384-d113-4956-a5d2-64be7357c11d":
+        ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
     # Parse date filters if provided
@@ -643,6 +650,8 @@ def get_collections_donut(
     Calculatesoutstanding collection balances grouped by aging periods.
     """
     tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    if str(tenant_id) == "d3b07384-d113-4956-a5d2-64be7357c11d":
+        ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
     # Grouping logic (0-15, 16-30, 31-60, 60+ days)
@@ -710,6 +719,8 @@ def get_recent_activity(
     Returns a chronologically merged activity feed from the ledger and file ingestion logs.
     """
     tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    if str(tenant_id) == "d3b07384-d113-4956-a5d2-64be7357c11d":
+        ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
     activity = []
@@ -804,6 +815,8 @@ def get_customers(
     Returns all customers for a tenant.
     """
     tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    if str(tenant_id) == "d3b07384-d113-4956-a5d2-64be7357c11d":
+        ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
     customers = db.query(Customer).filter(Customer.tenant_id == tenant_id).all()
     results = []

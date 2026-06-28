@@ -72,7 +72,10 @@ def list_orders(
     Returns all orders for a tenant.
     """
     from app.services.tenant_service import resolve_tenant_id
+    from app.services.demo_service import ensure_demo_data
     resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    if str(resolved_tenant_id) == "d3b07384-d113-4956-a5d2-64be7357c11d":
+        ensure_demo_data(db, resolved_tenant_id)
     tenant_context.set(resolved_tenant_id)
     from sqlalchemy import select
 
