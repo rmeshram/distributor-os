@@ -58,6 +58,7 @@ class Order(Base, TenantMixin):
 
     line_items: Mapped[list["OrderLineItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
     ledger_entries: Mapped[list["OrderStateLedger"]] = relationship(back_populates="order", cascade="all, delete-orphan")
+    customer: Mapped["Customer"] = relationship()
 
     @property
     def current_status(self) -> str:

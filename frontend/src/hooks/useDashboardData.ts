@@ -83,30 +83,21 @@ export function useDashboardData(
         }
       };
 
-      // Fetch Metrics with optional date filters
-      let metricsUrl = `${BASE_URL}/api/v1/dashboard/metrics?tenant_id=${activeTenantId}`;
+      // Fetch consolidated overview with optional date filters
+      let overviewUrl = `${BASE_URL}/api/v1/dashboard/overview?tenant_id=${activeTenantId}`;
       if (startDate) {
-        metricsUrl += `&start_date=${encodeURIComponent(startDate)}`;
+        overviewUrl += `&start_date=${encodeURIComponent(startDate)}`;
       }
       if (endDate) {
-        metricsUrl += `&end_date=${encodeURIComponent(endDate)}`;
+        overviewUrl += `&end_date=${encodeURIComponent(endDate)}`;
       }
-      const metricsResp = await fetch(metricsUrl, options);
-      if (!metricsResp.ok) throw new Error("Failed to fetch dashboard metrics");
-      const metricsData = await metricsResp.json();
-      setMetrics(metricsData);
+      const overviewResp = await fetch(overviewUrl, options);
+      if (!overviewResp.ok) throw new Error("Failed to fetch dashboard overview");
+      const overviewData = await overviewResp.json();
 
-      // Fetch Recent Orders
-      const ordersResp = await fetch(`${BASE_URL}/api/v1/dashboard/recent-orders?tenant_id=${activeTenantId}`, options);
-      if (!ordersResp.ok) throw new Error("Failed to fetch recent orders");
-      const ordersData = await ordersResp.json();
-      setRecentOrders(ordersData);
-
-      // Fetch Donut Data
-      const donutResp = await fetch(`${BASE_URL}/api/v1/dashboard/collections-donut?tenant_id=${activeTenantId}`, options);
-      if (!donutResp.ok) throw new Error("Failed to fetch collections donut");
-      const donutResData = await donutResp.json();
-      setDonutData(donutResData);
+      setMetrics(overviewData.metrics);
+      setRecentOrders(overviewData.recent_orders);
+      setDonutData(overviewData.donut_data);
       
       setError(null);
     } catch (err: any) {

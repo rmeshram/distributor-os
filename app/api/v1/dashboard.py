@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header
 from sqlalchemy import select, func, and_, desc
-from sqlalchemy.orm import Session, aliased, defer
+from sqlalchemy.orm import Session, aliased, defer, joinedload
 from sqlalchemy.exc import ProgrammingError
 import logging
 
@@ -33,6 +33,11 @@ class RecentOrderResponse(BaseModel):
     eta: str
     invoice_type: str
     raw_source_text: str | None = None
+
+class DashboardOverviewResponse(BaseModel):
+    metrics: dict
+    recent_orders: list[RecentOrderResponse]
+    donut_data: list[dict]
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -195,31 +200,38 @@ def get_dashboard_metrics(
     # 6. High-Risk Overdue Accounts (60+ days)
     now = datetime.utcnow()
     cutoff_date = now - timedelta(days=60)
-    customers = db.query(Customer).filter(Customer.tenant_id == tenant_id).all()
-    overdue_60_count = 0
-
-    for customer in customers:
-        entries = db.query(CustomerLedger).filter(
+    
+    credit_sub = (
+        select(func.coalesce(func.sum(CustomerLedger.amount), 0.0))
+        .where(
             and_(
                 CustomerLedger.tenant_id == tenant_id,
-                CustomerLedger.customer_id == customer.id
+                CustomerLedger.customer_id == Customer.id,
+                CustomerLedger.type == "CREDIT"
             )
-        ).order_by(CustomerLedger.created_at.asc()).all()
+        )
+        .scalar_subquery()
+    )
 
-        total_credits = sum(e.amount for e in entries if e.type == "CREDIT")
+    debit_sub = (
+        select(func.coalesce(func.sum(CustomerLedger.amount), 0.0))
+        .where(
+            and_(
+                CustomerLedger.tenant_id == tenant_id,
+                CustomerLedger.customer_id == Customer.id,
+                CustomerLedger.type == "DEBIT",
+                CustomerLedger.created_at < cutoff_date
+            )
+        )
+        .scalar_subquery()
+    )
 
-        has_overdue = False
-        for e in entries:
-            if e.type == "DEBIT":
-                if total_credits >= e.amount:
-                    total_credits -= e.amount
-                else:
-                    if e.created_at < cutoff_date:
-                        has_overdue = True
-                        break
-                    total_credits = 0
-        if has_overdue:
-            overdue_60_count += 1
+    overdue_stmt = (
+        select(func.count(Customer.id))
+        .where(Customer.tenant_id == tenant_id)
+        .where(debit_sub > credit_sub)
+    )
+    overdue_60_count = db.execute(overdue_stmt).scalar() or 0
 
     return {
         "total_sales": float(total_sales),
@@ -254,22 +266,29 @@ def get_recent_orders(
     ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
-    orders = db.query(Order).filter(Order.tenant_id == tenant_id).order_by(Order.created_at.desc()).limit(5).all()
+    orders = (
+        db.query(Order)
+        .options(
+            joinedload(Order.customer),
+            joinedload(Order.line_items).joinedload(OrderLineItem.product)
+        )
+        .filter(Order.tenant_id == tenant_id)
+        .order_by(Order.created_at.desc())
+        .limit(5)
+        .all()
+    )
     results = []
     
     for o in orders:
-        # Resolve customer name
-        customer = db.get(Customer, o.customer_id)
-        cust_name = customer.retailer_name if customer else "Unknown Retailer"
+        cust_name = o.customer.retailer_name if o.customer else "Unknown Retailer"
 
         # Calculate total amount
-        amount_stmt = select(func.sum(OrderLineItem.quantity * OrderLineItem.unit_price)).where(OrderLineItem.order_id == o.id)
-        amount = db.execute(amount_stmt).scalar() or 0.0
+        amount = sum(float(item.quantity * item.unit_price) for item in o.line_items)
 
         # Status badge conversion: Draft = "Pending", Confirmed = "Confirmed"
         status_raw = o.current_status
         has_triage_sku = any(
-            item.product_id is None or (db.get(Product, item.product_id) is not None and db.get(Product, item.product_id).sku_id in ("UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU"))
+            item.product_id is None or (item.product is not None and item.product.sku_id in ("UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU"))
             for item in o.line_items
         )
         if has_triage_sku or status_raw == "pending_review":
@@ -290,6 +309,300 @@ def get_recent_orders(
         })
 
     return results
+
+
+@router.get("/overview", response_model=DashboardOverviewResponse)
+def get_dashboard_overview(
+    tenant_id: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Consolidated dashboard overview endpoint returning metrics, recent orders,
+    and collections aging donut data in a single request.
+    """
+    tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    ensure_demo_data(db, tenant_id)
+    tenant_context.set(tenant_id)
+
+    # Parse date filters if provided
+    start_dt = None
+    end_dt = None
+    if start_date:
+        try:
+            if "T" in start_date:
+                start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00").replace("+00:00", ""))
+            else:
+                start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        except Exception:
+            pass
+    if end_date:
+        try:
+            if "T" in end_date:
+                end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00").replace("+00:00", ""))
+            else:
+                end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        except Exception:
+            pass
+
+    # ---------------- METRICS CALCULATION ----------------
+    # 1. Total Sales (sum of LineItems in non-Draft orders)
+    ledger_alias = aliased(OrderStateLedger)
+    valid_orders_sub = (
+        select(OrderStateLedger.order_id)
+        .where(
+            and_(
+                OrderStateLedger.to_status != "Draft",
+                OrderStateLedger.timestamp == (
+                    select(func.max(ledger_alias.timestamp))
+                    .where(ledger_alias.order_id == OrderStateLedger.order_id)
+                    .scalar_subquery()
+                )
+            )
+        )
+    )
+
+    total_sales_stmt = (
+        select(func.sum(OrderLineItem.quantity * OrderLineItem.unit_price))
+        .join(Order, OrderLineItem.order_id == Order.id)
+        .where(Order.id.in_(valid_orders_sub))
+        .where(Order.tenant_id == tenant_id)
+    )
+    if start_dt:
+        total_sales_stmt = total_sales_stmt.where(Order.created_at >= start_dt)
+    if end_dt:
+        total_sales_stmt = total_sales_stmt.where(Order.created_at <= end_dt)
+    total_sales = db.execute(total_sales_stmt).scalar() or 0.0
+
+    # 2. Orders Count
+    orders_count_stmt = select(func.count(Order.id)).where(Order.tenant_id == tenant_id)
+    if start_dt:
+        orders_count_stmt = orders_count_stmt.where(Order.created_at >= start_dt)
+    if end_dt:
+        orders_count_stmt = orders_count_stmt.where(Order.created_at <= end_dt)
+    orders_count = db.execute(orders_count_stmt).scalar() or 0
+
+    # 3. Average Order Value
+    aov = total_sales / orders_count if orders_count > 0 else 0.0
+
+    # Calculate comparison trend changes if date filters are present
+    total_sales_change = 0.0
+    orders_count_change = 0.0
+    average_order_value_change = 0.0
+
+    if start_dt and end_dt:
+        delta = end_dt - start_dt
+        hist_start_dt = start_dt - delta
+        hist_end_dt = start_dt
+
+        hist_total_sales_stmt = (
+            select(func.sum(OrderLineItem.quantity * OrderLineItem.unit_price))
+            .join(Order, OrderLineItem.order_id == Order.id)
+            .where(Order.id.in_(valid_orders_sub))
+            .where(Order.tenant_id == tenant_id)
+            .where(Order.created_at >= hist_start_dt)
+            .where(Order.created_at <= hist_end_dt)
+        )
+        hist_total_sales = db.execute(hist_total_sales_stmt).scalar() or 0.0
+
+        hist_orders_count_stmt = (
+            select(func.count(Order.id))
+            .where(Order.tenant_id == tenant_id)
+            .where(Order.created_at >= hist_start_dt)
+            .where(Order.created_at <= hist_end_dt)
+        )
+        hist_orders_count = db.execute(hist_orders_count_stmt).scalar() or 0
+
+        hist_aov = hist_total_sales / hist_orders_count if hist_orders_count > 0 else 0.0
+
+        if hist_total_sales > 0:
+            total_sales_change = float((total_sales - hist_total_sales) / hist_total_sales * 100)
+        if hist_orders_count > 0:
+            orders_count_change = float((orders_count - hist_orders_count) / hist_orders_count * 100)
+        if hist_aov > 0:
+            average_order_value_change = float((aov - hist_aov) / hist_aov * 100)
+
+    # 4. Outstanding Collections (Snapshot - Timeframe-Irrespective)
+    outstanding_stmt = select(func.sum(Invoice.total_amount)).where(Invoice.tenant_id == tenant_id)
+    outstanding = db.execute(outstanding_stmt).scalar() or 0.0
+
+    # 5. Inventory counts (Low Stock, Out of Stock, Total SKUs, Inventory Value)
+    total_skus_count = db.query(Inventory).filter(Inventory.tenant_id == tenant_id).count()
+
+    low_stock_count = db.query(Inventory).filter(
+        and_(
+            Inventory.tenant_id == tenant_id,
+            Inventory.quantity_on_hand < Inventory.low_stock_threshold,
+            Inventory.quantity_on_hand > 0
+        )
+    ).count()
+
+    out_of_stock_count = db.query(Inventory).filter(
+        and_(
+            Inventory.tenant_id == tenant_id,
+            Inventory.quantity_on_hand == 0
+        )
+    ).count()
+
+    inventory_val_sum = db.query(func.sum(Inventory.quantity_on_hand * Product.base_price))\
+        .join(Product, Inventory.sku_id == Product.id)\
+        .filter(Inventory.tenant_id == tenant_id).scalar() or 0.0
+
+    if inventory_val_sum >= 10000000:
+        inventory_value_str = f"₹ {(inventory_val_sum / 10000000):.2f} Cr"
+    elif inventory_val_sum >= 100000:
+        inventory_value_str = f"₹ {(inventory_val_sum / 100000):.2f}L"
+    else:
+        inventory_value_str = f"₹ {inventory_val_sum:,.2f}"
+
+    # 6. High-Risk Overdue Accounts (60+ days) - Optimized set-based SQL subquery
+    now = datetime.utcnow()
+    cutoff_date = now - timedelta(days=60)
+    
+    credit_sub = (
+        select(func.coalesce(func.sum(CustomerLedger.amount), 0.0))
+        .where(
+            and_(
+                CustomerLedger.tenant_id == tenant_id,
+                CustomerLedger.customer_id == Customer.id,
+                CustomerLedger.type == "CREDIT"
+            )
+        )
+        .scalar_subquery()
+    )
+
+    debit_sub = (
+        select(func.coalesce(func.sum(CustomerLedger.amount), 0.0))
+        .where(
+            and_(
+                CustomerLedger.tenant_id == tenant_id,
+                CustomerLedger.customer_id == Customer.id,
+                CustomerLedger.type == "DEBIT",
+                CustomerLedger.created_at < cutoff_date
+            )
+        )
+        .scalar_subquery()
+    )
+
+    overdue_stmt = (
+        select(func.count(Customer.id))
+        .where(Customer.tenant_id == tenant_id)
+        .where(debit_sub > credit_sub)
+    )
+    overdue_60_count = db.execute(overdue_stmt).scalar() or 0
+
+    metrics = {
+        "total_sales": float(total_sales),
+        "total_sales_change": float(total_sales_change),
+        "orders_count": int(orders_count),
+        "orders_count_change": float(orders_count_change),
+        "average_order_value": float(aov),
+        "average_order_value_change": float(average_order_value_change),
+        "outstanding_collections": float(outstanding),
+        "outstanding_collections_change": 0.0,
+        "low_stock_count": low_stock_count,
+        "out_of_stock_count": out_of_stock_count,
+        "total_skus_count": total_skus_count,
+        "inventory_value": inventory_value_str,
+        "overdue_60_count": overdue_60_count,
+        "total_skus": total_skus_count,
+        "total_inventory_value": float(inventory_val_sum)
+    }
+
+    # ---------------- RECENT ORDERS CALCULATION ----------------
+    orders = (
+        db.query(Order)
+        .options(
+            joinedload(Order.customer),
+            joinedload(Order.line_items).joinedload(OrderLineItem.product)
+        )
+        .filter(Order.tenant_id == tenant_id)
+        .order_by(Order.created_at.desc())
+        .limit(5)
+        .all()
+    )
+    recent_orders = []
+    
+    for o in orders:
+        cust_name = o.customer.retailer_name if o.customer else "Unknown Retailer"
+        amount = sum(float(item.quantity * item.unit_price) for item in o.line_items)
+
+        # Status badge conversion: Draft = "Pending", Confirmed = "Confirmed"
+        status_raw = o.current_status
+        has_triage_sku = any(
+            item.product_id is None or (item.product is not None and item.product.sku_id in ("UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU"))
+            for item in o.line_items
+        )
+        if has_triage_sku or status_raw == "pending_review":
+            status_raw = "pending_review"
+        status_resolved = "Pending" if status_raw == "Draft" else ("Needs Review" if status_raw in ["NEEDS_REVIEW", "pending_review"] else status_raw)
+
+        recent_orders.append({
+            "id": str(o.id),
+            "order_id": o.internal_order_id,
+            "customer": cust_name,
+            "channel": o.source,
+            "amount": float(amount),
+            "status": status_resolved,
+            "created_on": o.created_at.strftime("%d %b, %I:%M %p"),
+            "eta": o.created_at.strftime("%d %b, %I:%M %p"),
+            "invoice_type": o.invoice_type,
+            "raw_source_text": o.raw_source_text
+        })
+
+    # ---------------- COLLECTIONS DONUT CALCULATION ----------------
+    donut_data = []
+    if tenant_id == DEMO_TENANT_ID:
+        donut_data = [
+            {"name": "0-15 Days", "value": 845000, "percentage": 39},
+            {"name": "16-30 Days", "value": 612000, "percentage": 29},
+            {"name": "31-60 Days", "value": 475000, "percentage": 22},
+            {"name": "60+ Days", "value": 205000, "percentage": 10}
+        ]
+    else:
+        invoices = db.query(Invoice).filter(Invoice.tenant_id == tenant_id).all()
+        buckets = {
+            "0-15 Days": 0.0,
+            "16-30 Days": 0.0,
+            "31-60 Days": 0.0,
+            "60+ Days": 0.0
+        }
+        for inv in invoices:
+            order_for_inv = db.get(Order, inv.order_id)
+            if not order_for_inv:
+                continue
+            days_old = (now - order_for_inv.created_at).days
+            if days_old <= 15:
+                buckets["0-15 Days"] += float(inv.total_amount)
+            elif days_old <= 30:
+                buckets["16-30 Days"] += float(inv.total_amount)
+            elif days_old <= 60:
+                buckets["31-60 Days"] += float(inv.total_amount)
+            else:
+                buckets["60+ Days"] += float(inv.total_amount)
+
+        total_bucket_sum = sum(buckets.values())
+        if total_bucket_sum == 0:
+            donut_data = [
+                {"name": "0-15 Days", "value": 0, "percentage": 0},
+                {"name": "16-30 Days", "value": 0, "percentage": 0},
+                {"name": "31-60 Days", "value": 0, "percentage": 0},
+                {"name": "60+ Days", "value": 0, "percentage": 0}
+            ]
+        else:
+            donut_data = [
+                {"name": name, "value": val, "percentage": int(round((val / total_bucket_sum) * 100))}
+                for name, val in buckets.items()
+            ]
+
+    return {
+        "metrics": metrics,
+        "recent_orders": recent_orders,
+        "donut_data": donut_data
+    }
 
 
 @router.get("/order-details/{order_id}")

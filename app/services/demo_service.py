@@ -21,7 +21,7 @@ def ensure_demo_data(db: Session, tenant_id: uuid.UUID | None = None):
     screenshot if the database is empty.
     """
     # Hard multi-tenant lockout constraint
-    if str(tenant_id) != "d3b07384-d113-4956-a5d2-64be7357c11d":
+    if tenant_id != DEMO_TENANT_ID and str(tenant_id) != str(DEMO_TENANT_ID):
         return  # Abort immediately. NEVER seed default rows into custom distributor profiles.
 
     # 1. Check if the default tenant exists
