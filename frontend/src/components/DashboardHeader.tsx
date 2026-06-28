@@ -111,21 +111,22 @@ export default function DashboardHeader({
 
         {/* Notifications & Badges */}
         {/* Hidden 2026-06-28: Messages tab disabled, see /dashboard/messages/page.tsx for details.
-        // Uncomment this block to re-enable.
-        <div className="flex items-center gap-4">
+        // To restore: remove the "false && (" wrapper and its matching ")}". */}
+        {false && (
+          <div className="flex items-center gap-4">
 
 
-          {/* WhatsApp Webhook alert count */}
-          <Link href="/dashboard/messages" className="relative p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-all cursor-pointer">
-            <MessageSquare className="w-5 h-5 text-emerald-600" />
-            <span className="absolute top-0 right-0 w-4.5 h-4.5 bg-emerald-500 text-[9px] font-bold text-white rounded-full flex items-center justify-center border-2 border-white">
-              8
-            </span>
-          </Link>
+            {/* WhatsApp Webhook alert count */}
+            <Link href="/dashboard/messages" className="relative p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-all cursor-pointer">
+              <MessageSquare className="w-5 h-5 text-emerald-600" />
+              <span className="absolute top-0 right-0 w-4.5 h-4.5 bg-emerald-500 text-[9px] font-bold text-white rounded-full flex items-center justify-center border-2 border-white">
+                8
+              </span>
+            </Link>
 
 
-        </div>
-        */}
+          </div>
+        )}
 
         {/* User Profile with Dropdown */}
         <div className="relative">
