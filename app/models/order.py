@@ -42,7 +42,13 @@ class Order(Base, TenantMixin):
 
     @property
     def total_amount(self) -> float:
-        return sum(float(item.quantity * item.unit_price) for item in self.line_items)
+        return sum(
+            float(
+                (item.allocated_quantity if item.allocated_quantity is not None else item.quantity)
+                * item.unit_price
+            )
+            for item in self.line_items
+        )
     @property
     def payment_status(self) -> str:
         if hasattr(self, "_payment_status") and self._payment_status is not None:
@@ -81,6 +87,9 @@ class OrderLineItem(Base, TenantMixin):
     order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
     product_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=True, default=None)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Quantity actually fulfilled after partial-allocation logic during Confirmation.
+    # NULL means the row pre-dates demand-gap tracking — treat as fully allocated (= quantity).
+    allocated_quantity: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     unit_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     unmatched_raw_text: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
 

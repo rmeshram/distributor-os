@@ -15,6 +15,7 @@ from app.models.customer import Customer
 from app.models.ledger import CustomerLedger
 from app.models.invoice import Invoice
 from app.models.inventory import Inventory
+from app.models.demand_gap import DemandGap
 
 logger = logging.getLogger(__name__)
 
@@ -212,9 +213,30 @@ def update_order_status(
                     order_total = sum(float(line.quantity * line.unit_price) for line in co.line_items)
                     total_confirmed_outstanding += order_total
 
-            # 4. Check Credit Limit
+            # 4. Check Credit Limit — uses original requested total; behaviour unchanged.
             combined_balance = total_confirmed_outstanding + current_order_total
             if combined_balance > float(customer.credit_limit):
+                try:
+                    db.add(DemandGap(
+                        id=uuid.uuid4(),
+                        tenant_id=order.tenant_id,
+                        order_id=order.id,
+                        customer_id=order.customer_id,
+                        product_id=None,
+                        reason_code="CREDIT_LIMIT",
+                        status="OPEN",
+                        resolved_at=None,
+                        requested_qty=None,
+                        allocated_qty=None,
+                        gap_qty=None,
+                        unit_price=None,
+                        revenue_at_risk=current_order_total,
+                        created_at=datetime.utcnow(),
+                    ))
+                    db.commit()
+                except Exception as _gap_err:
+                    logger.warning("Failed to persist CREDIT_LIMIT DemandGap: %s", _gap_err)
+                    db.rollback()
                 raise HTTPException(
                     status_code=400,
                     detail=f"Credit limit exceeded for customer '{customer.retailer_name}'. Combined balance: ₹{combined_balance:,.2f}, Credit Limit: ₹{customer.credit_limit:,.2f}"
@@ -230,37 +252,54 @@ def update_order_status(
                     item.sku_code = "UNKNOWN_SKU"
                     item.product_name = "Unknown Product"
 
-            # 5. Inventory Guardrail Validation Loop
+            # 5. Single-pass inventory allocation — partial allocation replaces hard reject.
+            #    For each line item we fill as much as stock allows and record any shortfall
+            #    as a STOCK_SHORTAGE DemandGap row (committed with the rest of the transaction).
             for item in items:
-                # Find the corresponding inventory row for this tenant and SKU
                 inv_record = db.query(Inventory).filter(
                     Inventory.tenant_id == order.tenant_id,
-                    Inventory.sku_id == item.product_id  # Matches parent model ID mapping link
+                    Inventory.sku_id == item.product_id,
                 ).first()
-                
-                if not inv_record:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Warehouse stock record not initialized for product code {item.sku_code}"
-                    )
-                    
-                if inv_record.quantity_on_hand < item.quantity:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Insufficient physical stock for item. Requested: {item.quantity}, Available: {inv_record.quantity_on_hand}"
-                    )
 
-            # Rewrite Stock Decrement Execution: Perform atomic subtraction on the real stock inventory rows
-            for item in items:
-                inv_record = db.query(Inventory).filter(
-                    Inventory.tenant_id == order.tenant_id,
-                    Inventory.sku_id == item.product_id
-                ).first()
-                if inv_record:
-                    inv_record.quantity_on_hand -= item.quantity
+                available = inv_record.quantity_on_hand if inv_record else 0
+                allocated = min(item.quantity, available)
+                item.allocated_quantity = allocated
+                gap_qty = item.quantity - allocated
+
+                if gap_qty > 0:
+                    # Record shortfall — revenue_at_risk = units not fulfilled × unit price
+                    db.add(DemandGap(
+                        id=uuid.uuid4(),
+                        tenant_id=order.tenant_id,
+                        order_id=order.id,
+                        customer_id=order.customer_id,
+                        product_id=item.product_id,
+                        reason_code="STOCK_SHORTAGE",
+                        status="OPEN",
+                        resolved_at=None,
+                        requested_qty=item.quantity,
+                        allocated_qty=allocated,
+                        gap_qty=gap_qty,
+                        unit_price=float(item.unit_price),
+                        revenue_at_risk=float(gap_qty * item.unit_price),
+                        created_at=datetime.utcnow(),
+                    ))
+
+                # Decrement inventory only by what was actually allocated
+                if inv_record and allocated > 0:
+                    inv_record.quantity_on_hand -= allocated
+
+            # 6. Recompute billing total using allocated quantities (not original quantities).
+            billing_total = sum(
+                float(
+                    (item.allocated_quantity if item.allocated_quantity is not None else item.quantity)
+                    * item.unit_price
+                )
+                for item in items
+            )
 
             # Update Customer outstanding balance
-            customer.outstanding_balance = float(customer.outstanding_balance) + current_order_total
+            customer.outstanding_balance = float(customer.outstanding_balance) + billing_total
 
             # Record a DEBIT transaction in the customer ledger
             db.add(CustomerLedger(
@@ -268,17 +307,16 @@ def update_order_status(
                 tenant_id=order.tenant_id,
                 customer_id=order.customer_id,
                 type="DEBIT",
-                amount=current_order_total,
+                amount=billing_total,
                 reference_id=order.internal_order_id
             ))
 
             # Create Invoice directly
-            from datetime import datetime
             invoice = Invoice(
                 tenant_id=order.tenant_id,
                 order_id=order.id,
                 gstin=customer.gstin if customer.gstin else "29AAAAA1111A1Z1",
-                total_amount=current_order_total,
+                total_amount=billing_total,
                 irn_status="Cleared",
                 qr_code_status="Generated",
                 customer_id=order.customer_id,

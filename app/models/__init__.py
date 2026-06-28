@@ -12,6 +12,7 @@ from app.models.user import User
 from app.models.ledger import CustomerLedger
 from app.models.auth import WhatsAppVerification
 from app.models.whatsapp_message_log import WhatsappMessageLog
+from app.models.demand_gap import DemandGap
 
 __all__ = [
     "Base",
@@ -37,6 +38,7 @@ __all__ = [
     "CustomerLedger",
     "WhatsAppVerification",
     "WhatsappMessageLog",
+    "DemandGap",
 ]
 
 

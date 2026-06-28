@@ -19,6 +19,7 @@ from app.models.ingestion import IngestionJob, IngestionStaging
 from app.models.user import User
 from app.models.ledger import CustomerLedger
 from app.utils.security import hash_password, verify_jwt
+from app.models.demand_gap import DemandGap
 
 from pydantic import BaseModel
 
@@ -838,3 +839,88 @@ def get_customers(
             "whatsapp_notifications_enabled": c.whatsapp_notifications_enabled
         })
     return results
+
+
+@router.get("/demand-gap-summary")
+def get_demand_gap_summary(
+    tenant_id: str | None = None,
+    days: int = 7,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Rolling-window summary of unmet customer demand.
+
+    Query params:
+      - tenant_id: UUID of the tenant (resolved from cookie/header if omitted)
+      - days: look-back window in days; default 7, max 90
+
+    Response shape is generic: `by_reason` is a list ordered by revenue_at_risk desc,
+    one entry per reason_code present in the window. Adding a new reason_code in the
+    backend automatically surfaces it here without a frontend schema change.
+    """
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    tenant_context.set(resolved_tenant_id)
+
+    # Clamp window to a sensible max
+    days = max(1, min(days, 90))
+    cutoff = datetime.utcnow() - timedelta(days=days)
+
+    # Base query: all demand_gaps for this tenant in the window
+    gaps = (
+        db.query(DemandGap)
+        .filter(
+            DemandGap.tenant_id == resolved_tenant_id,
+            DemandGap.created_at >= cutoff,
+        )
+        .all()
+    )
+
+    # Aggregate totals across ALL reason codes
+    total_revenue_at_risk = sum(float(g.revenue_at_risk) for g in gaps)
+    distinct_customers = len({g.customer_id for g in gaps})
+
+    # Group by reason_code
+    by_reason_map: dict = {}
+    for g in gaps:
+        rc = g.reason_code
+        if rc not in by_reason_map:
+            by_reason_map[rc] = {
+                "reason_code": rc,
+                "events": 0,
+                "units_gap": 0,          # None for reason codes without a unit concept
+                "has_units": False,
+                "revenue_at_risk": 0.0,
+                "customer_ids": set(),
+            }
+        bucket = by_reason_map[rc]
+        bucket["events"] += 1
+        bucket["revenue_at_risk"] += float(g.revenue_at_risk)
+        bucket["customer_ids"].add(g.customer_id)
+        if g.gap_qty is not None:
+            bucket["units_gap"] += g.gap_qty
+            bucket["has_units"] = True
+
+    by_reason = sorted(
+        [
+            {
+                "reason_code": b["reason_code"],
+                "events": b["events"],
+                # units_gap is null for reason codes that have no quantity concept (e.g. CREDIT_LIMIT)
+                "units_gap": b["units_gap"] if b["has_units"] else None,
+                "revenue_at_risk": round(b["revenue_at_risk"], 2),
+                "customers_affected": len(b["customer_ids"]),
+            }
+            for b in by_reason_map.values()
+        ],
+        key=lambda x: x["revenue_at_risk"],
+        reverse=True,
+    )
+
+    return {
+        "window_days": days,
+        "total_revenue_at_risk": round(total_revenue_at_risk, 2),
+        "distinct_customers_affected": distinct_customers,
+        "by_reason": by_reason,
+    }
