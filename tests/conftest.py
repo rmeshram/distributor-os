@@ -1,5 +1,6 @@
 import pytest
 import uuid
+import os
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -17,14 +18,19 @@ from app.models.invoice import Invoice
 
 @pytest.fixture(name="db_engine")
 def fixture_db_engine():
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool
-    )
-    Base.metadata.create_all(bind=engine)
-    yield engine
-    Base.metadata.drop_all(bind=engine)
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url:
+        engine = create_engine(database_url)
+        yield engine
+    else:
+        engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool
+        )
+        Base.metadata.create_all(bind=engine)
+        yield engine
+        Base.metadata.drop_all(bind=engine)
 
 @pytest.fixture(name="db_session")
 def fixture_db_session(db_engine):
