@@ -304,8 +304,8 @@ export default function OrdersPage() {
       const data = await response.json();
       if (response.ok) {
         showToast("Order confirmed successfully!", "success");
-        handleCloseDetails();
-        fetchOrders(activeTenantId);
+        await fetchOrders(activeTenantId);
+        await fetchOrderDetails(selectedOrderId);
       } else {
         const errorDetail = data.detail || "Failed to confirm order.";
         showToast(errorDetail, "error");

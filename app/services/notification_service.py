@@ -201,12 +201,13 @@ class NotificationService:
             # Generate item summary
             items_list = []
             for item in order.line_items:
+                qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
                 if item.product:
-                    items_list.append(f"{item.product.brand} x {item.quantity}")
+                    items_list.append(f"{item.product.brand} x {qty}")
                 elif item.unmatched_raw_text:
-                    items_list.append(f"{item.unmatched_raw_text} (Unmatched) x {item.quantity}")
+                    items_list.append(f"{item.unmatched_raw_text} (Unmatched) x {qty}")
                 else:
-                    items_list.append(f"Unknown Product x {item.quantity}")
+                    items_list.append(f"Unknown Product x {qty}")
             item_summary = ", ".join(items_list)
 
             rendered_message = template.format(
