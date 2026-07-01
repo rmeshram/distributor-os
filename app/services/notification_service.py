@@ -59,30 +59,41 @@ Total: ₹{total}"""
 PAYMENT_REMINDER_TEMPLATES = {
     "upcoming": """Hi {customer_name},
 
-Friendly reminder that your invoice {invoice_id} of ₹{total:,.2f} is due on {due_date}.
+Friendly reminder that ₹{total:,.0f} is due on {due_date}.
+
+Pay now: {payment_link}
 
 Thank you for your business!
 — {distributor_name}""",
 
     "just_overdue": """Hi {customer_name},
 
-This is a reminder that your account has {invoice_count} unpaid invoice(s) totaling ₹{total:,.2f} that are currently overdue.
+Your payment of ₹{total:,.0f} is overdue.
 
-Please arrange for payment as soon as possible.
+Pay most overdue invoice: {payment_link}
+Pay full outstanding balance: {outstanding_link}
+
+Please arrange payment at your earliest convenience.
 — {distributor_name}""",
 
     "moderately_overdue": """Hi {customer_name},
 
-This is a firm reminder that your account has {invoice_count} unpaid invoice(s) totaling ₹{total:,.2f} that are overdue.
+₹{total:,.0f} has been overdue for {days_overdue} days.
 
-Please process the payment immediately to avoid service interruption.
+Pay most overdue invoice: {payment_link}
+Pay full outstanding balance: {outstanding_link}
+
+Please process immediately to avoid service interruption.
 — {distributor_name}""",
 
     "severely_overdue": """Hi {customer_name},
 
-URGENT: Your account is severely overdue with {invoice_count} unpaid invoice(s) totaling ₹{total:,.2f}.
+URGENT: ₹{total:,.0f} is severely overdue ({days_overdue} days).
 
-Please clear the outstanding balance immediately.
+Pay most overdue invoice: {payment_link}
+Pay full outstanding balance: {outstanding_link}
+
+Please clear immediately.
 — {distributor_name}"""
 }
 
@@ -242,7 +253,10 @@ class NotificationService:
         db: Session,
         specific_invoice_id: str | None = None,
         specific_invoice_total: float | None = None,
-        specific_invoice_due_date: str | None = None
+        specific_invoice_due_date: str | None = None,
+        payment_link: str | None = None,
+        outstanding_link: str | None = None,
+        days_overdue: int = 0
     ) -> bool:
         """
         Renders and sends a tiered payment reminder via Evolution API.
@@ -251,8 +265,9 @@ class NotificationService:
         try:
             # 1. Check tenant notification preferences
             prefs = tenant.notification_prefs or {}
-            if not prefs.get("payment_reminder", True):
-                logger.info("Notification skipped: payment_reminder disabled for tenant %s", str(tenant.id))
+            pref_key = "payment_reminder_upcoming" if tier == "upcoming" else "payment_reminder_overdue"
+            if not prefs.get(pref_key, True) and not prefs.get("payment_reminder", True):
+                logger.info("Notification skipped: %s disabled for tenant %s", pref_key, str(tenant.id))
                 return False
 
             # 2. Check customer notifications enablement
@@ -266,12 +281,16 @@ class NotificationService:
                 logger.warning("Notification skipped: No template found for payment reminder tier %s", tier)
                 return False
 
+            link_to_show = payment_link if payment_link else "Contact your distributor to pay"
+            out_link_to_show = outstanding_link if outstanding_link else "Contact your distributor to pay"
+
             rendered_message = template.format(
                 customer_name=customer.name,
-                invoice_id=specific_invoice_id or "N/A",
                 total=specific_invoice_total if tier == "upcoming" else total_outstanding,
                 due_date=specific_invoice_due_date or "N/A",
-                invoice_count=invoice_count,
+                payment_link=link_to_show,
+                outstanding_link=out_link_to_show,
+                days_overdue=days_overdue,
                 distributor_name=tenant.name
             )
 

@@ -17,8 +17,11 @@ interface NotificationPrefs {
   order_confirmed: boolean;
   order_dispatched: boolean;
   order_delivered: boolean;
-  payment_reminder: boolean;
   new_order_alert_to_distributor: boolean;
+  payment_reminder: boolean;
+  payment_reminder_upcoming: boolean;
+  payment_reminder_overdue: boolean;
+  payment_received_confirmation: boolean;
 }
 
 const PREF_LABELS = {
@@ -38,15 +41,41 @@ const PREF_LABELS = {
     title: "Order Delivered Alert",
     desc: "Notify customers when their order has been successfully delivered."
   },
+  new_order_alert_to_distributor: {
+    title: "New Order Alert (to you)",
+    desc: "Receive a WhatsApp ping on your own registered phone number when a new order is received."
+  },
   payment_reminder: {
     title: "Payment Reminder",
     desc: "Send payment notifications or reminders to customers with outstanding balances."
   },
-  new_order_alert_to_distributor: {
-    title: "New Order Alert (to you)",
-    desc: "Receive a WhatsApp ping on your own registered phone number when a new order is received."
+  payment_reminder_upcoming: {
+    title: "Upcoming Payment Reminder",
+    desc: "Send payment notifications to customers before their invoice due date."
+  },
+  payment_reminder_overdue: {
+    title: "Overdue Payment Reminder",
+    desc: "Send tiered reminders to customers when their invoices are past due."
+  },
+  payment_received_confirmation: {
+    title: "Payment Received Confirmation",
+    desc: "Notify customers immediately when their payment collection is successfully registered."
   }
 };
+
+const OPERATIONAL_KEYS = [
+  "order_received",
+  "order_confirmed",
+  "order_dispatched",
+  "order_delivered",
+  "new_order_alert_to_distributor"
+] as const;
+
+const FINANCIAL_KEYS = [
+  "payment_reminder_upcoming",
+  "payment_reminder_overdue",
+  "payment_received_confirmation"
+] as const;
 
 export default function NotificationsSettingsPage() {
   const [activeTenantId, setActiveTenantId] = useState("");
@@ -57,8 +86,11 @@ export default function NotificationsSettingsPage() {
     order_confirmed: true,
     order_dispatched: true,
     order_delivered: true,
+    new_order_alert_to_distributor: true,
     payment_reminder: true,
-    new_order_alert_to_distributor: true
+    payment_reminder_upcoming: true,
+    payment_reminder_overdue: true,
+    payment_received_confirmation: true
   });
 
   const [toast, setToast] = useState({ show: false, message: "", type: "success" as "success" | "error" });
@@ -101,6 +133,9 @@ export default function NotificationsSettingsPage() {
             order_dispatched: data.order_dispatched !== false,
             order_delivered: data.order_delivered !== false,
             payment_reminder: data.payment_reminder !== false,
+            payment_reminder_upcoming: data.payment_reminder_upcoming !== false,
+            payment_reminder_overdue: data.payment_reminder_overdue !== false,
+            payment_received_confirmation: data.payment_received_confirmation !== false,
             new_order_alert_to_distributor: data.new_order_alert_to_distributor !== false
           });
         } else {
@@ -223,38 +258,77 @@ export default function NotificationsSettingsPage() {
                 <span className="text-slate-500 text-sm font-medium animate-pulse">Loading notification preferences...</span>
               </div>
             ) : (
-              <div className="bg-white border border-dashboard-border rounded-xl overflow-hidden shadow-sm">
-                <div className="px-6 py-4 border-b border-dashboard-border bg-slate-50 flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Notification Preferences</span>
-                  <span className="text-xs text-slate-400 font-medium">Auto-saves on change</span>
-                </div>
-                <div className="divide-y divide-dashboard-border">
-                  {(Object.keys(PREF_LABELS) as Array<keyof NotificationPrefs>).map((key) => {
-                    const label = PREF_LABELS[key];
-                    const isChecked = prefs[key];
-                    return (
-                      <div key={key} className="px-6 py-5 flex items-center justify-between hover:bg-slate-50/50 transition-all duration-200">
-                        <div className="space-y-1 pr-6">
-                          <h4 className="text-sm font-semibold text-slate-800">{label.title}</h4>
-                          <p className="text-xs text-slate-500 leading-relaxed max-w-xl">{label.desc}</p>
-                        </div>
-                        
-                        {/* Toggle Switch */}
-                        <button
-                          onClick={() => handleToggle(key)}
-                          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                            isChecked ? "bg-emerald-500" : "bg-slate-200"
-                          }`}
-                        >
-                          <span
-                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                              isChecked ? "translate-x-5" : "translate-x-0"
+              <div className="space-y-6">
+                {/* Operational Section */}
+                <div className="bg-white border border-dashboard-border rounded-xl overflow-hidden shadow-sm">
+                  <div className="px-6 py-4 border-b border-dashboard-border bg-slate-50 flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Operational Notifications</span>
+                    <span className="text-xs text-slate-400 font-medium">Auto-saves on change</span>
+                  </div>
+                  <div className="divide-y divide-dashboard-border">
+                    {OPERATIONAL_KEYS.map((key) => {
+                      const label = PREF_LABELS[key];
+                      const isChecked = prefs[key];
+                      return (
+                        <div key={key} className="px-6 py-5 flex items-center justify-between hover:bg-slate-50/50 transition-all duration-200">
+                          <div className="space-y-1 pr-6">
+                            <h4 className="text-sm font-semibold text-slate-800">{label.title}</h4>
+                            <p className="text-xs text-slate-500 leading-relaxed max-w-xl">{label.desc}</p>
+                          </div>
+                          
+                          {/* Toggle Switch */}
+                          <button
+                            onClick={() => handleToggle(key)}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              isChecked ? "bg-emerald-500" : "bg-slate-200"
                             }`}
-                          />
-                        </button>
-                      </div>
-                    );
-                  })}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                isChecked ? "translate-x-5" : "translate-x-0"
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Financial Section */}
+                <div className="bg-white border border-dashboard-border rounded-xl overflow-hidden shadow-sm">
+                  <div className="px-6 py-4 border-b border-dashboard-border bg-slate-50 flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Financial Notifications</span>
+                    <span className="text-xs text-slate-400 font-medium">Auto-saves on change</span>
+                  </div>
+                  <div className="divide-y divide-dashboard-border">
+                    {FINANCIAL_KEYS.map((key) => {
+                      const label = PREF_LABELS[key];
+                      const isChecked = prefs[key];
+                      return (
+                        <div key={key} className="px-6 py-5 flex items-center justify-between hover:bg-slate-50/50 transition-all duration-200">
+                          <div className="space-y-1 pr-6">
+                            <h4 className="text-sm font-semibold text-slate-800">{label.title}</h4>
+                            <p className="text-xs text-slate-500 leading-relaxed max-w-xl">{label.desc}</p>
+                          </div>
+                          
+                          {/* Toggle Switch */}
+                          <button
+                            onClick={() => handleToggle(key)}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              isChecked ? "bg-emerald-500" : "bg-slate-200"
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                isChecked ? "translate-x-5" : "translate-x-0"
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}

@@ -1,7 +1,6 @@
-- [x] Implement preferred invoice support in `process_payment` inside `app/services/payment_service.py`
-- [x] Simplify webhook reconciliation call in `app/api/v1/payments.py`
-- [x] Support custom_amount in `get_or_create_payment_session` inside `app/services/payment_session_service.py`
-- [x] Implement `GET /api/v1/payments/payment-options` endpoint in `app/api/v1/payments.py`
-- [x] Add comment placeholder in `frontend/src/app/dashboard/orders/page.tsx`
-- [x] Add regression test `test_preferred_invoice_paid_first` in `tests/test_razorpay.py`
-- [x] Run backend tests and verify
+- [x] Modify `app/services/notification_service.py` to include payment links and outstanding links in templates and signature
+- [x] Modify `app/services/payment_reminder_service.py` to fetch both payment links and check split preference keys
+- [x] Modify `app/models/tenant.py` to update the default `notification_prefs` JSON value
+- [x] Modify `app/api/v1/payments.py` to add `POST /trigger-reminder-sweep`
+- [x] Modify `frontend/src/app/dashboard/settings/notifications/page.tsx` to split Operational and Financial notifications
+- [x] Run test suite `py -m pytest tests/ -x -q` to verify

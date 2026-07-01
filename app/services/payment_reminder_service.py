@@ -40,6 +40,8 @@ async def run_payment_reminder_sweep(db: Session) -> dict:
             prefs = tenant.notification_prefs or {}
             if not prefs.get("payment_reminder", True):
                 continue
+            if not prefs.get("payment_reminder_upcoming", True) and not prefs.get("payment_reminder_overdue", True):
+                continue
 
             summary["tenants_processed"] += 1
 
@@ -107,6 +109,12 @@ async def run_payment_reminder_sweep(db: Session) -> dict:
                     else:
                         tier = "severely_overdue"
 
+                    # Check specific preference key for the mapped tier
+                    pref_key = "payment_reminder_upcoming" if tier == "upcoming" else "payment_reminder_overdue"
+                    if not prefs.get(pref_key, True) and not prefs.get("payment_reminder", True):
+                        logger.info("Skipping reminder for customer %s: %s disabled in preferences", customer.name, pref_key)
+                        continue
+
                     # 4. FREQUENCY CAP check
                     # Check WhatsappMessageLog for a recent payment_reminder event for this customer
                     last_log = (
@@ -159,6 +167,62 @@ async def run_payment_reminder_sweep(db: Session) -> dict:
                         due_date = most_overdue_invoice.created_at + timedelta(days=credit_days)
                         specific_invoice_due_date = due_date.strftime("%Y-%m-%d")
 
+                    # Fetch or create payment links
+                    payment_link = None
+                    outstanding_link = None
+                    try:
+                        from app.services.payment_session_service import get_or_create_payment_session
+                        from app.models.payment_session import PaymentSession
+
+                        # Per-invoice link (most overdue invoice)
+                        if most_overdue_invoice:
+                            order = db.get(Order, most_overdue_invoice.order_id)
+                            if order:
+                                existing_session = db.query(PaymentSession).filter(
+                                    PaymentSession.invoice_id == most_overdue_invoice.id,
+                                    PaymentSession.status == "ACTIVE"
+                                ).first()
+
+                                if existing_session and existing_session.payment_link_url:
+                                    payment_link = existing_session.payment_link_short_url or existing_session.payment_link_url
+                                else:
+                                    from app.models.customer import Customer as CustomerModel
+                                    cust_obj = db.get(CustomerModel, customer.id)
+                                    session = get_or_create_payment_session(
+                                        db=db,
+                                        invoice=most_overdue_invoice,
+                                        customer=cust_obj,
+                                        order_id=order.id,
+                                        tenant_id=tenant.id
+                                    )
+                                    db.commit()
+                                    payment_link = session.payment_link_short_url or session.payment_link_url
+
+                        # Consolidated outstanding link (only for overdue tiers)
+                        if tier != "upcoming" and fresh_total > 0:
+                            oldest_unpaid_invoice = None
+                            for inv in fresh_invoices:
+                                if oldest_unpaid_invoice is None or inv.created_at < oldest_unpaid_invoice.created_at:
+                                    oldest_unpaid_invoice = inv
+
+                            if oldest_unpaid_invoice:
+                                oldest_order = db.get(Order, oldest_unpaid_invoice.order_id)
+                                if oldest_order:
+                                    from app.models.customer import Customer as CustomerModel
+                                    cust_obj = db.get(CustomerModel, customer.id)
+                                    session_out = get_or_create_payment_session(
+                                        db=db,
+                                        invoice=oldest_unpaid_invoice,
+                                        customer=cust_obj,
+                                        order_id=oldest_order.id,
+                                        tenant_id=tenant.id,
+                                        custom_amount=fresh_total
+                                    )
+                                    db.commit()
+                                    outstanding_link = session_out.payment_link_short_url or session_out.payment_link_url
+                    except Exception as link_ex:
+                        logger.warning("Could not fetch payment link for reminder: %s", str(link_ex))
+
                     # 6. Send the payment reminder
                     success = await notification_service.notify_payment_reminder(
                         tenant=tenant,
@@ -169,7 +233,10 @@ async def run_payment_reminder_sweep(db: Session) -> dict:
                         db=db,
                         specific_invoice_id=specific_invoice_id,
                         specific_invoice_total=specific_invoice_total,
-                        specific_invoice_due_date=specific_invoice_due_date
+                        specific_invoice_due_date=specific_invoice_due_date,
+                        payment_link=payment_link,
+                        outstanding_link=outstanding_link,
+                        days_overdue=most_overdue_days
                     )
 
                     if success:

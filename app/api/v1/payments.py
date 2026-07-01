@@ -310,3 +310,20 @@ def get_payment_options(
             "custom_amount_enabled": True
         }
     }
+
+
+@router.post("/trigger-reminder-sweep", status_code=200)
+async def trigger_payment_reminder_sweep(db: Session = Depends(get_db)):
+    """
+    Triggers the payment reminder sweep manually or via scheduled cron.
+    In production, call this daily via an external cron (e.g. cron-job.org).
+    """
+    import logging
+    logger = logging.getLogger("uvicorn.error")
+    from app.services.payment_reminder_service import run_payment_reminder_sweep
+    try:
+        summary = await run_payment_reminder_sweep(db)
+        return {"status": "success", "summary": summary}
+    except Exception as e:
+        logger.error("Reminder sweep failed: %s", str(e))
+        raise HTTPException(status_code=500, detail=str(e))

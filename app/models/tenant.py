@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime
 from sqlalchemy import String, DateTime, Integer, JSON
@@ -21,7 +22,19 @@ class DistributorTenant(Base):
     notification_prefs: Mapped[dict] = mapped_column(
         JSONB().with_variant(JSON(), "sqlite"),
         nullable=False,
-        server_default='{"order_received": true, "order_confirmed": true, "order_dispatched": true, "payment_reminder": true, "new_order_alert_to_distributor": true, "order_delivered": true}'
+        server_default=json.dumps({
+            # Operational
+            "order_received": True,
+            "order_confirmed": True,
+            "order_dispatched": True,
+            "order_delivered": True,
+            "new_order_alert_to_distributor": True,
+            # Financial
+            "payment_reminder": True,
+            "payment_reminder_upcoming": True,
+            "payment_reminder_overdue": True,
+            "payment_received_confirmation": True
+        })
     )
 
 
