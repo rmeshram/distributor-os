@@ -123,7 +123,10 @@ def list_orders(
         cust_name = o.customer.retailer_name if o.customer else "Unknown Retailer"
 
         # Calculate total amount
-        amount_sum = sum(float(item.quantity * item.unit_price) for item in o.line_items)
+        amount_sum = sum(
+            float((item.allocated_quantity if item.allocated_quantity is not None else item.quantity) * item.unit_price)
+            for item in o.line_items
+        )
 
         # Status badge conversion: Draft = "Pending", Confirmed = "Confirmed", Needs Review = "Needs Review"
         status_raw = o.current_status
@@ -1661,7 +1664,10 @@ def get_order_risk_assessment(
             detail="Tenant not found"
         )
 
-    current_order_total = sum(float(item.quantity * item.unit_price) for item in order.line_items)
+    current_order_total = sum(
+        float((item.allocated_quantity if item.allocated_quantity is not None else item.quantity) * item.unit_price)
+        for item in order.line_items
+    )
 
     # Outstanding and credit
     outstanding = float(customer.outstanding_balance)
