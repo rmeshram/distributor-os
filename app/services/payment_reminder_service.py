@@ -51,7 +51,8 @@ async def run_payment_reminder_sweep(db: Session) -> dict:
                 .join(Invoice, Invoice.customer_id == Customer.id)
                 .filter(
                     Customer.tenant_id == tenant.id,
-                    Invoice.payment_status.in_(["UNPAID", "PARTIALLY_PAID"])
+                    Invoice.payment_status.in_(["UNPAID", "PARTIALLY_PAID"]),
+                    Invoice.total_amount > 0  # exclude zero-value invoices
                 )
                 .distinct()
                 .all()
@@ -66,7 +67,8 @@ async def run_payment_reminder_sweep(db: Session) -> dict:
                         db.query(Invoice)
                         .filter(
                             Invoice.customer_id == customer.id,
-                            Invoice.payment_status.in_(["UNPAID", "PARTIALLY_PAID"])
+                            Invoice.payment_status.in_(["UNPAID", "PARTIALLY_PAID"]),
+                            Invoice.total_amount > 0  # exclude zero-value invoices
                         )
                         .all()
                     )
@@ -102,9 +104,9 @@ async def run_payment_reminder_sweep(db: Session) -> dict:
                         continue
                     elif most_overdue_days < 0:
                         tier = "upcoming"
-                    elif most_overdue_days <= 15:
+                    elif most_overdue_days <= 7:
                         tier = "just_overdue"
-                    elif most_overdue_days <= 30:
+                    elif most_overdue_days <= 21:
                         tier = "moderately_overdue"
                     else:
                         tier = "severely_overdue"
@@ -143,7 +145,8 @@ async def run_payment_reminder_sweep(db: Session) -> dict:
                         db.query(Invoice)
                         .filter(
                             Invoice.customer_id == customer.id,
-                            Invoice.payment_status.in_(["UNPAID", "PARTIALLY_PAID"])
+                            Invoice.payment_status.in_(["UNPAID", "PARTIALLY_PAID"]),
+                            Invoice.total_amount > 0  # exclude zero-value invoices
                         )
                         .all()
                     )
@@ -200,26 +203,24 @@ async def run_payment_reminder_sweep(db: Session) -> dict:
 
                         # Consolidated outstanding link (only for overdue tiers)
                         if tier != "upcoming" and fresh_total > 0:
-                            oldest_unpaid_invoice = None
-                            for inv in fresh_invoices:
-                                if oldest_unpaid_invoice is None or inv.created_at < oldest_unpaid_invoice.created_at:
-                                    oldest_unpaid_invoice = inv
-
-                            if oldest_unpaid_invoice:
-                                oldest_order = db.get(Order, oldest_unpaid_invoice.order_id)
-                                if oldest_order:
-                                    from app.models.customer import Customer as CustomerModel
-                                    cust_obj = db.get(CustomerModel, customer.id)
-                                    session_out = get_or_create_payment_session(
+                            try:
+                                oldest_invoice = sorted(fresh_invoices, key=lambda x: x.created_at)[0]
+                                order = db.get(Order, oldest_invoice.order_id)
+                                if order:
+                                    outstanding_session = get_or_create_payment_session(
                                         db=db,
-                                        invoice=oldest_unpaid_invoice,
-                                        customer=cust_obj,
-                                        order_id=oldest_order.id,
+                                        invoice=oldest_invoice,
+                                        customer=db.get(Customer, customer.id),
+                                        order_id=order.id,
                                         tenant_id=tenant.id,
-                                        custom_amount=fresh_total
+                                        custom_amount=fresh_total  # pass total outstanding as custom amount
                                     )
                                     db.commit()
-                                    outstanding_link = session_out.payment_link_short_url or session_out.payment_link_url
+                                    outstanding_link = outstanding_session.payment_link_short_url or outstanding_session.payment_link_url
+                                    logger.info("Outstanding payment link created: %s", outstanding_link)
+                            except Exception as link_ex:
+                                logger.warning("Outstanding link creation failed: %s", str(link_ex))
+                                outstanding_link = None
                     except Exception as link_ex:
                         logger.warning("Could not fetch payment link for reminder: %s", str(link_ex))
 
