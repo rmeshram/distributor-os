@@ -14,74 +14,42 @@ from app.models.product import Product
 
 logger = logging.getLogger("uvicorn.error")
 
-def confirm_order(db: Session, order: Order, updated_by: str) -> None:
-    """
-    Consolidated order confirmation and billing logic.
-    Refactored to be reusable across all entry points in the system.
-    """
-    # 1. Resolve from_status
-    from_status = order.current_status
 
-    # 2. Fetch Customer
+def confirm_order(db: Session, order: Order, updated_by: str) -> Invoice:
+    """
+    Consolidated order confirmation logic.
+    Steps:
+    1. Fetch customer
+    2. Allocate inventory (partial fill allowed)
+    3. Compute billing total from allocated quantities
+    4. Check credit limit against billing total
+    5. Create invoice, ledger entry, state transition
+    Returns the created Invoice.
+    """
+
+    # ── 1. Fetch customer ──────────────────────────────────────────────────────
     customer = db.get(Customer, order.customer_id)
     if not customer:
-        raise HTTPException(
-            status_code=404,
-            detail="Customer not found"
-        )
+        raise HTTPException(status_code=404, detail="Customer not found")
 
-    # 3. Calculate current order total (requested total)
-    # Fetch Child Line Items to make sure they are fresh/loaded
-    items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order.id).all()
-    current_order_total = sum(float(item.quantity * item.unit_price) for item in items)
+    from_status = order.current_status
 
-    # 4. Check Credit Limit — uses original requested total
-    total_confirmed_outstanding = 0.0
-    confirmed_orders = db.query(Order).filter(Order.customer_id == order.customer_id).all()
-    for co in confirmed_orders:
-        if co.id != order.id and co.current_status == "Confirmed":
-            order_total = sum(float(line.quantity * line.unit_price) for line in co.line_items)
-            total_confirmed_outstanding += order_total
+    # ── 2. Fetch fresh line items ──────────────────────────────────────────────
+    items = db.query(OrderLineItem).filter(
+        OrderLineItem.order_id == order.id
+    ).all()
 
-    combined_balance = total_confirmed_outstanding + current_order_total
-    if combined_balance > float(customer.credit_limit):
-        try:
-            db.add(DemandGap(
-                id=uuid.uuid4(),
-                tenant_id=order.tenant_id,
-                order_id=order.id,
-                customer_id=order.customer_id,
-                product_id=None,
-                reason_code="CREDIT_LIMIT",
-                status="OPEN",
-                resolved_at=None,
-                requested_qty=None,
-                allocated_qty=None,
-                gap_qty=None,
-                unit_price=None,
-                revenue_at_risk=current_order_total,
-                created_at=datetime.utcnow(),
-            ))
-            db.commit()
-        except Exception as _gap_err:
-            logger.warning("Failed to persist CREDIT_LIMIT DemandGap: %s", _gap_err)
-            db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail=f"Credit limit exceeded for customer '{customer.retailer_name}'. Combined balance: ₹{combined_balance:,.2f}, Credit Limit: ₹{customer.credit_limit:,.2f}"
-        )
-
-    # Resolve product variables dynamically
+    # Resolve product metadata
     for item in items:
-        prod_data = db.query(Product).filter(Product.id == item.product_id).first()
-        if prod_data:
-            item.sku_code = prod_data.sku_id
-            item.product_name = prod_data.sku_id
+        prod = db.query(Product).filter(Product.id == item.product_id).first()
+        if prod:
+            item.sku_code = prod.sku_id
+            item.product_name = prod.sku_id
         else:
             item.sku_code = "UNKNOWN_SKU"
             item.product_name = "Unknown Product"
 
-    # 5. Single-pass inventory allocation — partial allocation replaces hard reject.
+    # ── 3. Inventory allocation (single pass, partial fill) ────────────────────
     for item in items:
         inv_record = db.query(Inventory).filter(
             Inventory.tenant_id == order.tenant_id,
@@ -93,8 +61,8 @@ def confirm_order(db: Session, order: Order, updated_by: str) -> None:
         item.allocated_quantity = allocated
         gap_qty = item.quantity - allocated
 
+        # Create DemandGap for shortfall if not already exists
         if gap_qty > 0:
-            # Check if DemandGap already exists for this order+product to avoid duplicates
             existing_gap = db.query(DemandGap).filter(
                 DemandGap.order_id == order.id,
                 DemandGap.product_id == item.product_id,
@@ -118,13 +86,14 @@ def confirm_order(db: Session, order: Order, updated_by: str) -> None:
                     created_at=datetime.utcnow(),
                 ))
 
+        # Deduct inventory for allocated units
         if inv_record and allocated > 0:
-    inv_record.quantity_on_hand -= allocated
-    inv_record.quantity_committed = (inv_record.quantity_committed or 0) + allocated
+            inv_record.quantity_on_hand -= allocated
+            inv_record.quantity_committed = (inv_record.quantity_committed or 0) + allocated
 
     db.flush()
 
-    # 6. Recompute billing total using allocated quantities (not original quantities).
+    # ── 4. Billing total from allocated quantities ─────────────────────────────
     billing_total = sum(
         float(
             (item.allocated_quantity if item.allocated_quantity is not None else item.quantity)
@@ -133,10 +102,45 @@ def confirm_order(db: Session, order: Order, updated_by: str) -> None:
         for item in items
     )
 
-    # Update Customer outstanding balance
+    # ── 5. Credit limit check against billing total ────────────────────────────
+    confirmed_outstanding = sum(
+        sum(float(li.allocated_quantity or li.quantity) * float(li.unit_price)
+            for li in co.line_items)
+        for co in db.query(Order).filter(
+            Order.customer_id == order.customer_id,
+            Order.tenant_id == order.tenant_id
+        ).all()
+        if co.id != order.id and co.current_status == "Confirmed"
+    )
+
+    combined = confirmed_outstanding + billing_total
+    if combined > float(customer.credit_limit):
+        db.add(DemandGap(
+            id=uuid.uuid4(),
+            tenant_id=order.tenant_id,
+            order_id=order.id,
+            customer_id=order.customer_id,
+            product_id=None,
+            reason_code="CREDIT_LIMIT",
+            status="OPEN",
+            resolved_at=None,
+            requested_qty=None,
+            allocated_qty=None,
+            gap_qty=None,
+            unit_price=None,
+            revenue_at_risk=billing_total,
+            created_at=datetime.utcnow(),
+        ))
+        db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Credit limit exceeded. Combined balance: ₹{combined:,.2f}, Limit: ₹{float(customer.credit_limit):,.2f}"
+        )
+
+    # ── 6. Update customer outstanding balance ─────────────────────────────────
     customer.outstanding_balance = float(customer.outstanding_balance) + billing_total
 
-    # Record a DEBIT transaction in the customer ledger
+    # ── 7. Ledger entry ────────────────────────────────────────────────────────
     db.add(CustomerLedger(
         id=uuid.uuid4(),
         tenant_id=order.tenant_id,
@@ -146,7 +150,7 @@ def confirm_order(db: Session, order: Order, updated_by: str) -> None:
         reference_id=order.internal_order_id
     ))
 
-    # Create Invoice directly
+    # ── 8. Create Invoice ──────────────────────────────────────────────────────
     invoice = Invoice(
         tenant_id=order.tenant_id,
         order_id=order.id,
@@ -162,15 +166,15 @@ def confirm_order(db: Session, order: Order, updated_by: str) -> None:
     db.add(invoice)
     db.flush()
 
-    # Reconcile customer payments immediately to consume any credits
+    # ── 9. Reconcile any existing customer credits against new invoice ──────────
     from app.services.payment_service import reconcile_payments_and_invoices
     reconcile_payments_and_invoices(db, order.tenant_id, order.customer_id)
 
-    # Process bulk self-learning
+    # ── 10. Self-learning for product alias updates ────────────────────────────
     from app.api.v1.orders import process_order_self_learning
     process_order_self_learning(db, order.id, order.tenant_id)
 
-    # Record state transition to OrderStateLedger
+    # ── 11. State transition ───────────────────────────────────────────────────
     db.add(OrderStateLedger(
         tenant_id=order.tenant_id,
         order_id=order.id,
@@ -179,3 +183,5 @@ def confirm_order(db: Session, order: Order, updated_by: str) -> None:
         updated_by=updated_by
     ))
     order.status = "Confirmed"
+
+    return invoice
