@@ -119,7 +119,8 @@ def confirm_order(db: Session, order: Order, updated_by: str) -> None:
                 ))
 
         if inv_record and allocated > 0:
-            inv_record.quantity_committed = (inv_record.quantity_committed or 0) + allocated
+    inv_record.quantity_on_hand -= allocated
+    inv_record.quantity_committed = (inv_record.quantity_committed or 0) + allocated
 
     db.flush()
 
