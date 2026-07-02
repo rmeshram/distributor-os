@@ -1068,7 +1068,7 @@ export default function OrdersPage() {
               )}
 
               <div className="flex items-center justify-between gap-3 w-full">
-                {selectedOrder && (selectedOrder.status === "Pending" || selectedOrder.status === "Needs Review") ? (
+                {selectedOrder && (selectedOrder.status === "Pending" || selectedOrder.status === "Needs Review") && (
                   <button
                     onClick={handleConfirmOrder}
                     disabled={isConfirming}
@@ -1083,8 +1083,11 @@ export default function OrdersPage() {
                       <span>Confirm Order</span>
                     )}
                   </button>
-                ) : selectedOrder && selectedOrder.status === "Confirmed" ? (
-                  <div className="flex gap-2">
+                )}
+
+                <div className="flex gap-2 flex-wrap">
+                  {/* Download invoice — only for Confirmed */}
+                  {selectedOrder && selectedOrder.status === "Confirmed" && (
                     <button
                       onClick={() => {
                         const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -1095,7 +1098,30 @@ export default function OrdersPage() {
                       <FileSpreadsheet className="w-4 h-4" />
                       <span>Download B2B Invoice</span>
                     </button>
+                  )}
 
+                  {/* Mark Delivered — only for Dispatched */}
+                  {selectedOrder && selectedOrder.status === "Dispatched" && (
+                    <button
+                      onClick={handleMarkDelivered}
+                      disabled={isMarkingDelivered}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      {isMarkingDelivered ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Marking Delivered...</span>
+                        </>
+                      ) : (
+                        <span>Mark as Delivered</span>
+                      )}
+                    </button>
+                  )}
+
+                  {/* Copy Payment Link — for any unpaid post-confirmation order */}
+                  {selectedOrder &&
+                   ["Confirmed", "Dispatched", "Delivered"].includes(selectedOrder.status) &&
+                   selectedOrder.payment_status !== "PAID" && (
                     <button
                       onClick={async () => {
                         try {
@@ -1132,25 +1158,8 @@ export default function OrdersPage() {
                       <span>🔗</span>
                       <span>Copy Payment Link</span>
                     </button>
-                  </div>
-                ) : selectedOrder && selectedOrder.status === "Dispatched" ? (
-                  <button
-                    onClick={handleMarkDelivered}
-                    disabled={isMarkingDelivered}
-                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
-                  >
-                    {isMarkingDelivered ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Marking Delivered...</span>
-                      </>
-                    ) : (
-                      <span>Mark as Delivered</span>
-                    )}
-                  </button>
-                ) : (
-                  <div></div>
-                )}
+                  )}
+                </div>
                 <button
                   onClick={handleCloseDetails}
                   className="px-5 py-2.5 bg-slate-800 text-white hover:bg-slate-700 text-sm font-bold rounded-lg transition-all cursor-pointer"
