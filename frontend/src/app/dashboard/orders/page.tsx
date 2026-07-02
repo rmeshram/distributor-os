@@ -1084,23 +1084,55 @@ export default function OrdersPage() {
                     )}
                   </button>
                 ) : selectedOrder && selectedOrder.status === "Confirmed" ? (
-                  <button
-                    onClick={() => {
-                      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-                      window.open(`${apiBase}/api/v1/orders/${selectedOrderId}/invoice`, "_blank");
-                    }}
-                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
-                  >
-                    <FileSpreadsheet className="w-4 h-4" />
-                    <span>Download B2B Invoice</span>
-                    {/* TODO: Payment Options Card
-                        Show three options to customer via WhatsApp:
-                        1. Pay Invoice ₹1,100 → payment_links.pay_invoice
-                        2. Pay Full Outstanding ₹58,420 → payment_links.pay_outstanding  
-                        3. Custom Amount → generate link on demand
-                        Endpoint: GET /api/v1/payments/payment-options?invoice_id={id}
-                    */}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+                        window.open(`${apiBase}/api/v1/orders/${selectedOrderId}/invoice`, "_blank");
+                      }}
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-4 h-4" />
+                      <span>Download B2B Invoice</span>
+                    </button>
+
+                    <button
+                      onClick={async () => {
+                        try {
+                          const invoiceId = selectedOrder?.invoice_id || selectedOrderPayments?.invoice_id;
+                          if (!invoiceId) {
+                            showToast("No invoice found for this order.", "error");
+                            return;
+                          }
+
+                          const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+                          const res = await fetch(
+                            `${apiBase}/api/v1/payments/payment-options?invoice_id=${invoiceId}&tenant_id=${activeTenantId}`
+                          );
+                          if (!res.ok) {
+                            showToast("Failed to fetch payment options.", "error");
+                            return;
+                          }
+                          const data = await res.json();
+                          const link = data?.payment_links?.pay_invoice;
+
+                          if (link) {
+                            await navigator.clipboard.writeText(link);
+                            showToast("Payment link copied to clipboard!", "success");
+                          } else {
+                            showToast("Payment link not available yet.", "error");
+                          }
+                        } catch (err) {
+                          console.error("Failed to copy link:", err);
+                          showToast("Failed to fetch payment link.", "error");
+                        }
+                      }}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      <span>🔗</span>
+                      <span>Copy Payment Link</span>
+                    </button>
+                  </div>
                 ) : selectedOrder && selectedOrder.status === "Dispatched" ? (
                   <button
                     onClick={handleMarkDelivered}

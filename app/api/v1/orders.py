@@ -58,6 +58,7 @@ class OrderResponse(BaseModel):
     invoice_type: str
     raw_source_text: str | None = None
     line_items: list[OrderLineItemResponse] = []
+    invoice_id: str | None = None
 
 
 class AllocatedPayment(BaseModel):
@@ -77,6 +78,7 @@ class OrderDetailResponse(BaseModel):
     payments_allocated: list[AllocatedPayment]
     invoice_type: str
     raw_source_text: str | None = None
+    invoice_id: str | None = None
 
 
 from reportlab.lib.pagesizes import letter
@@ -169,7 +171,8 @@ def list_orders(
             "amount_paid": amount_paid,
             "invoice_type": o.invoice_type,
             "raw_source_text": o.raw_source_text,
-            "line_items": line_items_data
+            "line_items": line_items_data,
+            "invoice_id": str(inv.id) if inv else None
         })
 
     return results
@@ -910,7 +913,8 @@ def get_order_by_id(
         "amount_paid": float(invoice.amount_paid) if invoice else 0.0,
         "payments_allocated": payments_allocated,
         "invoice_type": order.invoice_type,
-        "raw_source_text": order.raw_source_text
+        "raw_source_text": order.raw_source_text,
+        "invoice_id": str(invoice.id) if invoice else None
     }
 
 
