@@ -244,11 +244,11 @@ export default function MarketingPage() {
         <a href="#features" style={{color: '#e2e8f0', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>Features</a>
         <a href="#pricing" style={{color: '#e2e8f0', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>Pricing</a>
         <a href="#faq" style={{color: '#e2e8f0', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>FAQ</a>
-        <Link href="/auth/login" style={{color: '#e2e8f0', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>
+        <Link href="/auth" style={{color: '#e2e8f0', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>
           Login
         </Link>
-        <Link href="/auth/signup" style={{color: '#10b981', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0'}}>
-          Start Free Trial
+        <Link href="/auth" style={{color: '#10b981', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0'}}>
+          Get Started Free
         </Link>
       </div>
     </React.Fragment>)}
