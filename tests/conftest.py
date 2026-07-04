@@ -1,6 +1,7 @@
 import pytest
 import uuid
 import os
+os.environ.setdefault("ENCRYPTION_KEY", "u-F_l4aA83_3-xOQ221eT7XW1bT4oI7YvN0bM9L_Rws=")
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

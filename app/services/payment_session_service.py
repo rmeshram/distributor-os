@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from app.models.payment_session import PaymentSession
 from app.models.invoice import Invoice
 from app.models.customer import Customer
+from app.models.tenant import DistributorTenant
+from app.utils.encryption import decrypt_secret
 from app.services.payment_gateway import PaymentGateway
 from datetime import datetime, timedelta
 import uuid
@@ -53,8 +55,17 @@ def get_or_create_payment_session(
 
     amount_due = min(amount_due, RAZORPAY_TEST_MAX_AMOUNT)
 
-    # Create new payment link via Razorpay
-    gateway = PaymentGateway()
+    # Fetch tenant keys before instantiating
+    tenant = db.get(DistributorTenant, tenant_id)
+    if not tenant or not tenant.razorpay_key_id or not tenant.razorpay_key_secret_enc:
+        raise ValueError(
+            "Razorpay not connected. Please connect your Razorpay account in Settings → Payments."
+        )
+
+    gateway = PaymentGateway(
+        key_id=tenant.razorpay_key_id,
+        key_secret=decrypt_secret(tenant.razorpay_key_secret_enc)
+    )
     
     expire_by = int((datetime.utcnow() + timedelta(days=7)).timestamp())
     

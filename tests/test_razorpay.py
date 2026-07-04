@@ -9,6 +9,7 @@ from app.models.customer import Customer
 from app.models.product import Product
 from app.models.order import Order, OrderLineItem
 from app.models.payment_session import PaymentSession
+from app.utils.encryption import encrypt_secret
 
 @pytest.fixture(name="client")
 def fixture_client():
@@ -16,7 +17,11 @@ def fixture_client():
 
 def test_payment_session_created_on_confirmation(db_session, client):
     # Setup Tenant, Customer, Product, Inventory, Order, LineItem
-    tenant = DistributorTenant(name="Razorpay Test Tenant")
+    tenant = DistributorTenant(
+        name="Razorpay Test Tenant",
+        razorpay_key_id="rzp_test_key123",
+        razorpay_key_secret_enc=encrypt_secret("secret123")
+    )
     db_session.add(tenant)
     db_session.flush()
 
@@ -111,7 +116,11 @@ def test_payment_session_created_on_confirmation(db_session, client):
 
 def test_get_payment_link_endpoint(db_session, client):
     # Setup Tenant, Customer, Product, Inventory, Order, LineItem
-    tenant = DistributorTenant(name="Razorpay Endpoint Tenant")
+    tenant = DistributorTenant(
+        name="Razorpay Endpoint Tenant",
+        razorpay_key_id="rzp_test_key456",
+        razorpay_key_secret_enc=encrypt_secret("secret456")
+    )
     db_session.add(tenant)
     db_session.flush()
 
@@ -208,7 +217,11 @@ def test_get_payment_link_endpoint(db_session, client):
 
 def test_razorpay_webhook_paid_event(db_session, client):
     # Setup Tenant, Customer, Product, Inventory, Order, LineItem
-    tenant = DistributorTenant(name="Razorpay Webhook Tenant")
+    tenant = DistributorTenant(
+        name="Razorpay Webhook Tenant",
+        razorpay_key_id="rzp_test_key789",
+        razorpay_key_secret_enc=encrypt_secret("secret789")
+    )
     db_session.add(tenant)
     db_session.flush()
 
@@ -287,7 +300,7 @@ def test_razorpay_webhook_paid_event(db_session, client):
         assert response.status_code == 200
 
         # Now mock webhook signature verification and post the paid webhook
-        with patch("app.services.payment_gateway.PaymentGateway.verify_webhook_signature", return_value=True):
+        with patch("app.api.v1.payments.verify_razorpay_signature", return_value=True):
             webhook_payload = {
                 "event": "payment_link.paid",
                 "payload": {

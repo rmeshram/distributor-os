@@ -13,13 +13,16 @@ class PaymentGateway:
     Swap implementation here without changing callers.
     """
     
-    def __init__(self):
-        self.client = razorpay.Client(
-            auth=(
-                os.getenv("RAZORPAY_KEY_ID"),
-                os.getenv("RAZORPAY_KEY_SECRET")
+    def __init__(self, key_id: str | None = None, key_secret: str | None = None):
+        # Use provided keys (from tenant DB) 
+        # NO fallback to env vars — if no keys provided, raise immediately
+        if not key_id or not key_secret:
+            raise ValueError(
+                "Razorpay credentials not configured. "
+                "Please connect your Razorpay account in Settings → Payments."
             )
-        )
+        self.client = razorpay.Client(auth=(key_id, key_secret))
+        self.mode = "test" if key_id.startswith("rzp_test_") else "live"
     
     def create_payment_link(
         self,

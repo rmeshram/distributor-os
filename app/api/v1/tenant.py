@@ -200,3 +200,125 @@ def update_notification_prefs(
     
     return tenant.notification_prefs
 
+
+class RazorpayConnectPayload(BaseModel):
+    key_id: str = Field(..., min_length=1)
+    key_secret: str = Field(..., min_length=1)
+
+@router.get("/razorpay-status", status_code=status.HTTP_200_OK)
+def get_razorpay_status(
+    tenant_id: uuid.UUID = Query(...),
+    db: Session = Depends(get_db)
+):
+    tenant = db.get(DistributorTenant, tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found."
+        )
+    
+    connected = tenant.razorpay_key_id is not None and tenant.razorpay_key_secret_enc is not None
+    key_id_masked = None
+    if tenant.razorpay_key_id:
+        if len(tenant.razorpay_key_id) >= 13:
+            key_id_masked = tenant.razorpay_key_id[:13] + "•" * 8
+        else:
+            key_id_masked = tenant.razorpay_key_id + "•" * 8
+            
+    return {
+        "connected": connected,
+        "key_id_masked": key_id_masked,
+        "account_name": tenant.razorpay_account_name,
+        "mode": tenant.razorpay_mode
+    }
+
+@router.post("/razorpay-connect", status_code=status.HTTP_200_OK)
+def connect_razorpay(
+    payload: RazorpayConnectPayload,
+    tenant_id: uuid.UUID = Query(...),
+    db: Session = Depends(get_db)
+):
+    tenant = db.get(DistributorTenant, tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found."
+        )
+        
+    key_id = payload.key_id.strip()
+    key_secret = payload.key_secret.strip()
+    
+    # 1. Detect mode from key prefix
+    if key_id.startswith("rzp_live_"):
+        mode = "live"
+    elif key_id.startswith("rzp_test_"):
+        mode = "test"
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid Razorpay credentials"
+        )
+        
+    # 2. Validate keys by making a real Razorpay API call
+    import razorpay
+    from app.utils.encryption import encrypt_secret
+    try:
+        client = razorpay.Client(auth=(key_id, key_secret))
+        account = client.account.fetch()
+        account_name = account.get("profile", {}).get("name", "")
+    except Exception:
+        try:
+            client = razorpay.Client(auth=(key_id, key_secret))
+            client.payment_link.all({"count": 1})
+            account_name = "Razorpay Merchant"
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid Razorpay credentials"
+            )
+            
+    # 3. Encrypt and save keys
+    tenant.razorpay_key_id = key_id
+    tenant.razorpay_key_secret_enc = encrypt_secret(key_secret)
+    tenant.razorpay_account_name = account_name
+    tenant.razorpay_mode = mode
+    
+    db.commit()
+    
+    # Return success + masked key ID
+    if len(key_id) >= 13:
+        key_id_masked = key_id[:13] + "•" * 8
+    else:
+        key_id_masked = key_id + "•" * 8
+        
+    return {
+        "status": "success",
+        "key_id_masked": key_id_masked,
+        "account_name": account_name,
+        "mode": mode
+    }
+
+@router.delete("/razorpay-disconnect", status_code=status.HTTP_200_OK)
+def disconnect_razorpay(
+    tenant_id: uuid.UUID = Query(...),
+    db: Session = Depends(get_db)
+):
+    tenant = db.get(DistributorTenant, tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found."
+        )
+        
+    tenant.razorpay_key_id = None
+    tenant.razorpay_key_secret_enc = None
+    tenant.razorpay_account_name = None
+    tenant.razorpay_mode = "test"
+    
+    db.commit()
+    return {
+        "status": "success",
+        "message": "Razorpay account disconnected successfully"
+    }
+
+

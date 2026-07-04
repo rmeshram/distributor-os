@@ -127,6 +127,17 @@ def collect_payment(payload: CollectPayload, db: Session = Depends(get_db)):
     
     db.commit()
     return {"status": "success"}
+def verify_razorpay_signature(body: str, signature: str, secret: str) -> bool:
+    import hmac
+    import hashlib
+    if not signature or not secret:
+        return False
+    expected_signature = hmac.new(
+        key=secret.encode("utf-8"),
+        msg=body.encode("utf-8"),
+        digestmod=hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected_signature, signature)
 
 
 @router.post("/razorpay-webhook")
@@ -136,16 +147,16 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
     Marks PaymentSession as PAID and auto-reconciles against invoice.
     """
     import logging
+    import os
     from datetime import datetime
-    from app.services.payment_gateway import PaymentGateway
     from app.models.payment_session import PaymentSession
 
     logger = logging.getLogger("uvicorn.error")
     body = await request.body()
     signature = request.headers.get("X-Razorpay-Signature", "")
+    secret = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
     
-    gateway = PaymentGateway()
-    if not gateway.verify_webhook_signature(body.decode(), signature):
+    if not verify_razorpay_signature(body.decode("utf-8"), signature, secret):
         raise HTTPException(status_code=400, detail="Invalid webhook signature")
     
     payload = await request.json()
