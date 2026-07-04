@@ -1,366 +1,517 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
-import { MessageSquare, Map, Database, ArrowRight, Check, Sparkles, MessageCircle, BarChart3, Clock, AlertTriangle } from "lucide-react";
 
 export default function MarketingPage() {
-  const [showSandbox, setShowSandbox] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
+  const [visible, setVisible] = useState<Record<string, boolean>>({});
+  const [faqOpenIdx, setFaqOpenIdx] = useState<number | null>(null);
+  const [demoTyped, setDemoTyped] = useState('');
+  const [demoShowOrder, setDemoShowOrder] = useState(false);
+  const [statDistributors, setStatDistributors] = useState(0);
+  const [statCrores, setStatCrores] = useState(0);
+
+  const demoMessage = 'bhaiya 50 units rin soap bhejo 🙏';
+
+  // Refs for scroll observation
+  const refProblem = useRef<HTMLDivElement>(null);
+  const refHow = useRef<HTMLDivElement>(null);
+  const refFeatures = useRef<HTMLDivElement>(null);
+  const refProof = useRef<HTMLDivElement>(null);
+  const refPricing = useRef<HTMLDivElement>(null);
+  const refFaq = useRef<HTMLDivElement>(null);
+
+  // Resize listener
+  useEffect(() => {
+    const onResize = () => {
+      setIsMobile(window.innerWidth < 860);
+    };
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // Demo loop
+  useEffect(() => {
+    let mounted = true;
+    const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+    const runDemoLoop = async () => {
+      while (mounted) {
+        setDemoTyped('');
+        setDemoShowOrder(false);
+        await sleep(500);
+        for (let i = 1; i <= demoMessage.length; i++) {
+          if (!mounted) return;
+          setDemoTyped(demoMessage.slice(0, i));
+          await sleep(55);
+        }
+        await sleep(600);
+        if (!mounted) return;
+        setDemoShowOrder(true);
+        await sleep(3200);
+      }
+    };
+    runDemoLoop();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // IntersectionObserver for animate-on-scroll
+  useEffect(() => {
+    const startCounters = () => {
+      const duration = 1100;
+      const start = performance.now();
+      const step = (now: number) => {
+        const t = Math.min(1, (now - start) / duration);
+        const ease = 1 - Math.pow(1 - t, 3);
+        setStatDistributors(Math.round(50 * ease));
+        setStatCrores(Math.round(10 * ease));
+        if (t < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    };
+
+    const observedKeys: Record<string, React.RefObject<HTMLDivElement>> = {
+      problem: refProblem,
+      how: refHow,
+      features: refFeatures,
+      proof: refProof,
+      pricing: refPricing,
+      faq: refFaq
+    };
+
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const key = entry.target.getAttribute('data-observe-key');
+          if (key) {
+            setVisible(prev => ({ ...prev, [key]: true }));
+            if (key === 'proof') startCounters();
+            io.unobserve(entry.target);
+          }
+        }
+      });
+    }, { threshold: 0.15 });
+
+    Object.entries(observedKeys).forEach(([key, ref]) => {
+      if (ref.current) {
+        ref.current.setAttribute('data-observe-key', key);
+        io.observe(ref.current);
+      }
+    });
+
+    return () => io.disconnect();
+  }, []);
+
+  const toggleNav = () => setNavOpen(prev => !prev);
+
+  const cardStyle = (visibleState: boolean, index: number) => {
+    return {
+      opacity: visibleState ? 1 : 0,
+      transform: visibleState ? 'translateY(0)' : 'translateY(24px)',
+      transition: `opacity 0.6s ease ${index * 0.08}s, transform 0.6s ease ${index * 0.08}s`,
+    };
+  };
+
+  const problems = useMemo(() => {
+    return [
+      { icon: '💬', title: 'Orders lost in WhatsApp chats', desc: 'Retailer messages get buried in busy chat threads and missed entirely.' },
+      { icon: '🧾', title: 'Manual billing wastes hours', desc: 'Creating invoices by hand, every single day, for every single order.' },
+      { icon: '📞', title: 'Chasing payments is exhausting', desc: "Calling retailers again and again just to collect what you're owed." },
+    ].map((p, i) => ({ ...p, style: { background: '#f8fafc', border: '1px solid #eef2f7', borderRadius: '16px', padding: '32px 26px', ...cardStyle(visible.problem, i) } as React.CSSProperties }));
+  }, [visible.problem]);
+
+  const steps = useMemo(() => {
+    return [
+      { num: '1', title: 'Retailer sends a WhatsApp message', desc: '"bhaiya 50 units rin soap bhejo" — our AI reads it instantly, in Hindi, English or both.' },
+      { num: '2', title: 'Order is created automatically', desc: 'Invoice generated, inventory updated — no typing, no spreadsheets.' },
+      { num: '3', title: 'Payment link sent, auto-reconciled', desc: 'Retailer pays on WhatsApp. Payment is matched to the order the moment it lands.' },
+    ].map((s, i) => ({ ...s, style: { position: 'relative', padding: '30px 26px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', ...cardStyle(visible.how, i) } as React.CSSProperties }));
+  }, [visible.how]);
+
+  const features = useMemo(() => {
+    return [
+      { icon: '🤖', title: 'WhatsApp AI Order Parsing', desc: 'Hindi, English, mixed — all understood, instantly.' },
+      { icon: '🧾', title: 'Auto Invoice Generation', desc: 'GST bill or retail bill, ready in one click.' },
+      { icon: '📦', title: 'Smart Inventory Tracking', desc: "Know exactly what's in stock before you confirm an order." },
+      { icon: '💳', title: 'Payment Collection', desc: 'Razorpay links sent automatically, every payment tracked.' },
+      { icon: '🚚', title: 'Delivery Management', desc: 'Assign to a driver, track dispatch, notify the retailer.' },
+      { icon: '⏰', title: 'Payment Reminders', desc: 'Automatic WhatsApp reminders for overdue payments.' },
+    ].map((f, i) => ({ ...f, style: { display: 'flex', gap: '18px', padding: '24px', borderRadius: '14px', border: '1px solid #eef2f7', ...cardStyle(visible.features, i) } as React.CSSProperties }));
+  }, [visible.features]);
+
+  const testimonials = useMemo(() => {
+    return [
+      { name: 'Rajesh Gupta', city: 'Kanpur, UP', initial: 'R', quote: 'Ab main WhatsApp pe order aate hi dekh leta hoon — billing khud ho jaati hai.' },
+      { name: 'Sunil Deshmukh', city: 'Nashik, MH', initial: 'S', quote: 'Payment ke liye phone karna band ho gaya. Reminder khud chala jaata hai.' },
+      { name: 'Anita Reddy', city: 'Vijayawada, AP', initial: 'A', quote: 'Stock ka pata hamesha rehta hai. Galti se order confirm nahi hota.' },
+    ].map((t, i) => ({ ...t, style: { background: '#ffffff', border: '1px solid #eef2f7', borderRadius: '16px', padding: '28px', ...cardStyle(visible.proof, i) } as React.CSSProperties }));
+  }, [visible.proof]);
+
+  const pricingPlans = useMemo(() => {
+    return [
+      { name: 'Free Trial', price: '₹0', period: '/15 days', highlight: false,
+        features: ['All features included', 'No credit card needed', 'Full WhatsApp AI parsing', 'Cancel anytime'],
+        cta: 'Start Free Trial', bg: '#f8fafc', textColor: '#0f172a', subColor: '#64748b', btnBg: '#0f172a', btnColor: '#ffffff', border: '1px solid #eef2f7' },
+      { name: 'Growth', price: '₹2,999', period: '/month', highlight: true,
+        features: ['Up to 300 orders/month', '1 WhatsApp number', 'Auto invoicing & payments', 'Email support'],
+        cta: 'Choose Growth', bg: '#0f172a', textColor: '#ffffff', subColor: '#94a3b8', btnBg: '#10b981', btnColor: '#ffffff', border: '1px solid #0f172a' },
+      { name: 'Scale', price: '₹5,999', period: '/month', highlight: false,
+        features: ['Unlimited orders', '3 WhatsApp numbers', 'Priority support', 'Dedicated onboarding'],
+        cta: 'Choose Scale', bg: '#f8fafc', textColor: '#0f172a', subColor: '#64748b', btnBg: '#0f172a', btnColor: '#ffffff', border: '1px solid #eef2f7' },
+    ].map((p, i) => ({
+      ...p,
+      style: {
+        display: 'flex', flexDirection: 'column', background: p.bg, border: p.border, borderRadius: '18px',
+        padding: '32px 28px', transform: p.highlight ? 'scale(1.03)' : 'scale(1)',
+        boxShadow: p.highlight ? '0 24px 50px rgba(15,23,42,0.25)' : '0 1px 2px rgba(0,0,0,0.02)',
+        transition: 'transform 0.25s ease, box-shadow 0.25s ease',
+      } as React.CSSProperties,
+    }));
+  }, []);
+
+  const faqData = [
+    { q: 'Do my retailers need to download an app?', a: 'No. They just WhatsApp you as usual — nothing changes for them.' },
+    { q: 'What languages does it understand?', a: 'Hindi, English, and mixed Hinglish — however your retailers naturally type.' },
+    { q: 'Do I need to change how I work?', a: 'No. You keep using WhatsApp exactly as before. We automate everything behind it.' },
+    { q: 'What happens if the AI misreads an order?', a: 'You review and confirm every order before anything is dispatched.' },
+    { q: 'Is my data safe?', a: 'Yes. Hosted on secure cloud servers with daily backups.' },
+  ];
+
+  const faqs = useMemo(() => {
+    return faqData.map((f, i) => ({
+      ...f,
+      open: faqOpenIdx === i,
+      symbol: faqOpenIdx === i ? '−' : '+',
+      toggle: () => setFaqOpenIdx(prev => prev === i ? null : i),
+    }));
+  }, [faqOpenIdx]);
+
+  const navToggleIcon = navOpen ? '✕' : '☰';
+  const demoShowOrderNot = !demoShowOrder;
+  const isMobileNav = isMobile;
+  const isMobileNotNav = !isMobile;
+  const demoOrderStyle = {
+    background: '#ffffff', borderRadius: '16px', padding: '20px', boxShadow: '0 20px 45px rgba(0,0,0,0.35)',
+    animation: 'heroBubbleIn 0.5s ease',
+  } as React.CSSProperties;
 
   return (
-    <div className="bg-slate-50 min-h-screen text-slate-800 font-sans selection:bg-blue-100">
-      
-      {/* 1. Header Navigation */}
-      <header className="border-b border-slate-100 bg-white/85 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 rounded-xl bg-blue-650 flex items-center justify-center text-white text-base font-black shadow-md shadow-blue-200 transition-transform group-hover:scale-105">
-              D
-            </div>
-            <span className="font-extrabold text-slate-800 text-lg tracking-tight">DistributorOS</span>
-          </Link>
 
-          <nav className="hidden md:flex items-center gap-8">
-            <a href="#features" className="text-xs font-bold text-slate-500 hover:text-slate-855 transition-colors uppercase tracking-wider">Features</a>
-            <a href="#sandbox" className="text-xs font-bold text-slate-500 hover:text-slate-855 transition-colors uppercase tracking-wider">Sandbox Simulation</a>
-            <a href="#pricing" className="text-xs font-bold text-slate-500 hover:text-slate-855 transition-colors uppercase tracking-wider">Pricing Plans</a>
-          </nav>
+<div style={{fontFamily: '\'Inter\', -apple-system, sans-serif', color: '#0f172a', background: '#ffffff', width: '100%', overflowX: 'hidden', minHeight: '100vh'}}>
 
-          <div>
-            <Link 
-              href="/auth" 
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-100 flex items-center gap-1.5 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-            >
-              <span>Start Free Trial 🚀</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
+  {/* NAV */}
+  <div style={{position: 'sticky', top: 0, zIndex: 100, background: 'rgba(15,23,42,0.97)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>
+    <div style={{maxWidth: 1200, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px'}}>
+      <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
+        <div style={{width: 34, height: 34, borderRadius: 9, background: 'linear-gradient(135deg, #10b981, #0ea371)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0}}>💬</div>
+        <div style={{fontWeight: 800, fontSize: 18, color: '#ffffff', letterSpacing: '-0.02em'}}>Distributor<span style={{color: '#10b981'}}>OS</span></div>
+      </div>
+      {isMobileNav && (<React.Fragment>
+        <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
+          <Link href="/auth" style={{background: '#10b981', color: '#ffffff', fontWeight: 700, fontSize: 13, padding: '9px 14px', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'none'}}>Start Trial</Link>
+          <div onClick={toggleNav} style={{width: 38, height: 38, borderRadius: 8, background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#ffffff', fontSize: 18}}>{ navToggleIcon }</div>
         </div>
-      </header>
-
-      {/* 2. Hero Section */}
-      <section className="py-20 px-6 max-w-7xl mx-auto text-center relative overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-blue-100/30 rounded-full blur-3xl -z-10 animate-pulse" />
-        
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-blue-50 border border-blue-100/50 rounded-full text-blue-700 text-[11px] font-bold uppercase tracking-wider mb-6 shadow-sm">
-          <Sparkles className="w-3.5 h-3.5 text-blue-500 animate-spin-slow" />
-          <span>FMCG Order Ingestion Engine</span>
+      </React.Fragment>)}
+      {isMobileNotNav && (<React.Fragment>
+        <div style={{display: 'flex', alignItems: 'center', gap: 32}}>
+          <a href="#problem" style={{color: '#cbd5e1', textDecoration: 'none', fontSize: 14, fontWeight: 500}}>Problem</a>
+          <a href="#how" style={{color: '#cbd5e1', textDecoration: 'none', fontSize: 14, fontWeight: 500}}>How it Works</a>
+          <a href="#features" style={{color: '#cbd5e1', textDecoration: 'none', fontSize: 14, fontWeight: 500}}>Features</a>
+          <a href="#pricing" style={{color: '#cbd5e1', textDecoration: 'none', fontSize: 14, fontWeight: 500}}>Pricing</a>
+          <a href="#faq" style={{color: '#cbd5e1', textDecoration: 'none', fontSize: 14, fontWeight: 500}}>FAQ</a>
         </div>
-
-        <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-slate-900 tracking-tight max-w-4xl mx-auto leading-[1.1]">
-          The AI-First Operations Workspace for <span className="text-blue-600">FMCG Distributors</span>
-        </h1>
-        
-        <p className="text-sm sm:text-base text-slate-500 max-w-2xl mx-auto mt-6 leading-relaxed font-semibold">
-          Forwarding a chaotic text order on WhatsApp automatically converts it into a digital invoice line in seconds. Coordinate routes, ledger entries, and low-stock alerts on a single clean board.
-        </p>
-
-        <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link 
-            href="/auth" 
-            className="w-full sm:w-auto px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.01]"
-          >
-            <span>Start Free Trial 🚀</span>
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-          <button 
-            onClick={() => {
-              setShowSandbox(true);
-              document.getElementById("sandbox")?.scrollIntoView({ behavior: "smooth" });
-            }}
-            className="w-full sm:w-auto px-8 py-4 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            Simulate App Workspace
-          </button>
-        </div>
-      </section>
-
-      {/* 3. Interactive Sandbox Simulation */}
-      <section id="sandbox" className="py-16 px-6 max-w-5xl mx-auto border-t border-slate-100 scroll-mt-20">
-        <div className="text-center max-w-xl mx-auto mb-10">
-          <h2 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">Interactive Sandbox Simulation</h2>
-          <p className="text-xs text-slate-400 font-bold mt-2 uppercase tracking-widest">Experience the cockpit instantly</p>
-        </div>
-
-        <div className="flex justify-center mb-8">
-          <button
-            onClick={() => setShowSandbox(!showSandbox)}
-            className={`px-6 py-3 rounded-2xl text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer ${
-              showSandbox 
-                ? "bg-slate-900 text-white hover:bg-slate-800" 
-                : "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100"
-            }`}
-          >
-            <span>{showSandbox ? "Close Sandbox View" : "Simulate App Workspace ⚡"}</span>
-            <Sparkles className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Dynamic Sandbox Display */}
-        <div className={`transition-all duration-500 ease-in-out ${
-          showSandbox ? "opacity-100 max-h-[1000px] scale-100" : "opacity-0 max-h-0 scale-95 pointer-events-none overflow-hidden"
-        }`}>
-          <div className="bg-slate-900 text-white border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl relative">
-            <div className="absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-450 text-[10px] font-bold uppercase tracking-wider">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-              <span>Simulated Sandbox Active</span>
-            </div>
-
-            {/* Dashboard Mock Header */}
-            <div className="mb-6 border-b border-slate-800 pb-4">
-              <h4 className="font-extrabold text-sm text-slate-300 uppercase tracking-wider">DistributorOS Console</h4>
-              <p className="text-[11px] text-slate-500 font-medium mt-0.5">Mock workspace preview for: <strong>S.V. Distributors</strong></p>
-            </div>
-
-            {/* Mini Dashboard Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Total Sales Ingestion</span>
-                <span className="text-lg font-black text-blue-400 mt-2">₹1,84,500.00</span>
-                <span className="text-[10px] text-emerald-450 font-bold mt-1">↑ 12.4% vs last week</span>
-              </div>
-              <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Live AI Webhook Listeners</span>
-                <span className="text-lg font-black text-emerald-400 mt-2">Active</span>
-                <span className="text-[10px] text-slate-400 font-semibold mt-1">Listening on WhatsApp API</span>
-              </div>
-              <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Low Stock SKUs alert</span>
-                <span className="text-lg font-black text-amber-500 mt-2">2 Alert Items</span>
-                <span className="text-[10px] text-slate-400 font-semibold mt-1">Requires urgent dispatch review</span>
-              </div>
-            </div>
-
-            {/* Simulated Activity logs */}
-            <div className="bg-slate-950 border border-slate-850 rounded-2xl p-4">
-              <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-blue-500" />
-                <span>Real-Time Operation Feed (Simulation)</span>
-              </h5>
-              
-              <div className="space-y-3">
-                <div className="flex items-start justify-between text-xs border-b border-slate-900 pb-2">
-                  <div className="flex gap-2">
-                    <MessageCircle className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
-                    <div>
-                      <p className="font-semibold text-slate-350">WhatsApp Order Received from Kaveri Provision Store</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">"Need 20 packs Aata, 5 boxes Chips..."</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-bold text-emerald-450 uppercase">Parsed By AI</span>
-                </div>
-
-                <div className="flex items-start justify-between text-xs border-b border-slate-900 pb-2">
-                  <div className="flex gap-2">
-                    <BarChart3 className="w-4 h-4 text-blue-550 mt-0.5 shrink-0" />
-                    <div>
-                      <p className="font-semibold text-slate-350">Draft Invoice #INV-2026-102 Generated</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Total Amount: ₹8,450.00</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-slate-500 font-semibold">1 min ago</span>
-                </div>
-
-                <div className="flex items-start justify-between text-xs pb-1">
-                  <div className="flex gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-550 mt-0.5 shrink-0" />
-                    <div>
-                      <p className="font-semibold text-slate-350">Stock Alert: Brand "ITC Chips" is below threshold</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Quantity on hand: 5 units (Threshold: 10)</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-amber-500 font-bold uppercase">Low Stock</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Sandbox CTA */}
-            <div className="mt-8 flex items-center justify-between gap-4 flex-wrap border-t border-slate-800 pt-6">
-              <span className="text-xs font-semibold text-slate-400">Ready to ingest your actual supply chain records?</span>
-              <Link 
-                href="/auth" 
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
-              >
-                <span>Launch My Active Trial</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-          </div>
-        </div>
-      </section>
-
-      {/* 4. Features Grid */}
-      <section id="features" className="py-20 px-6 max-w-7xl mx-auto border-t border-slate-100">
-        <div className="text-center max-w-xl mx-auto mb-16">
-          <h2 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">Supercharged features built for scale</h2>
-          <p className="text-xs text-slate-400 font-bold mt-2 uppercase tracking-widest">Core Capabilities</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Card 1 */}
-          <div className="bg-white border border-slate-100 rounded-2xl p-8 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-[300px]">
-            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-sm">
-              <MessageSquare className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-800 mb-2">WhatsApp AI Ingestion</h3>
-              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                Automatically parse unstructured Hinglish message streams or audio memos into canonical draft digital orders. Gemini AI maps products, quantities, and customer profile details.
-              </p>
-            </div>
-          </div>
-
-          {/* Card 2 */}
-          <div className="bg-white border border-slate-100 rounded-2xl p-8 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-[300px]">
-            <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shadow-sm">
-              <Map className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-800 mb-2">Real-Time Route Sheets</h3>
-              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                Compile unallocated confirmed invoice checkpoints into optimal transport run sheets. Track drivers, vehicle assignments, and milestone delivery completions instantly.
-              </p>
-            </div>
-          </div>
-
-          {/* Card 3 */}
-          <div className="bg-white border border-slate-100 rounded-2xl p-8 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-[300px]">
-            <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-sm">
-              <Database className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-800 mb-2">Digital Stock Ledger</h3>
-              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                Strict inequality low-stock bounds prevent fulfillment lockups. Maintain a clean ledger mapping real warehouse location bins, threshold counts, and Tally/Marg ERP catalog sync.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 5. Pricing Matrix */}
-      <section id="pricing" className="py-20 px-6 max-w-7xl mx-auto border-t border-slate-100 bg-slate-50">
-        <div className="text-center max-w-xl mx-auto mb-16">
-          <h2 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">Simple, transparent, self-service pricing</h2>
-          <p className="text-xs text-slate-400 font-bold mt-2 uppercase tracking-widest">Pricing Matrix Tiers</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          
-          {/* Tier 1 */}
-          <div className="bg-white border border-slate-150 rounded-2xl p-8 shadow-sm flex flex-col justify-between min-h-[420px]">
-            <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400">Trial</span>
-              <h3 className="text-xl font-bold text-slate-800 mt-1">Starter Trial</h3>
-              <div className="mt-4 flex items-baseline gap-1 text-slate-800">
-                <span className="text-3xl font-extrabold">₹0</span>
-                <span className="text-xs text-slate-400 font-semibold">/15 days</span>
-              </div>
-              <p className="text-xs text-slate-500 font-semibold mt-3">15 Days Unrestricted Access for testing operations.</p>
-              
-              <ul className="mt-6 space-y-3">
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Unrestricted Workspace Features</span>
-                </li>
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>WhatsApp AI parsing simulation</span>
-                </li>
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Interactive Route Sheet Generator</span>
-                </li>
-              </ul>
-            </div>
-            
-            <Link href="/auth" className="mt-8 w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs text-center transition-all cursor-pointer block">
-              Get Started
-            </Link>
-          </div>
-
-          {/* Tier 2 */}
-          <div className="bg-white border-2 border-blue-500 rounded-2xl p-8 shadow-md flex flex-col justify-between min-h-[420px] relative">
-            <div className="absolute top-0 right-6 -translate-y-1/2 bg-blue-500 text-white text-[9px] font-black uppercase tracking-wider px-3 py-1 rounded-full">
-              Most Popular
-            </div>
-            <div>
-              <span className="text-[10px] uppercase font-bold text-blue-500">Growth</span>
-              <h3 className="text-xl font-bold text-slate-800 mt-1">Growth Tier</h3>
-              <div className="mt-4 flex items-baseline gap-1 text-slate-800">
-                <span className="text-3xl font-extrabold">₹4,999</span>
-                <span className="text-xs text-slate-400 font-semibold">/month</span>
-              </div>
-              <p className="text-xs text-slate-500 font-semibold mt-3">Up to 500 WhatsApp Orders processed per month.</p>
-              
-              <ul className="mt-6 space-y-3">
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>3 Warehouses & Bin Control</span>
-                </li>
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Up to 500 WhatsApp Orders</span>
-                </li>
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Live Driver Optimization Run Sheets</span>
-                </li>
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>FIFO Collection Allocation & Ledgers</span>
-                </li>
-              </ul>
-            </div>
-            
-            <Link href="/auth" className="mt-8 w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs text-center transition-all shadow-md shadow-blue-100 cursor-pointer block">
-              Start Free Trial 🚀
-            </Link>
-          </div>
-
-          {/* Tier 3 */}
-          <div className="bg-white border border-slate-150 rounded-2xl p-8 shadow-sm flex flex-col justify-between min-h-[420px]">
-            <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400">Enterprise</span>
-              <h3 className="text-xl font-bold text-slate-800 mt-1">Enterprise Tier</h3>
-              <div className="mt-4 flex items-baseline gap-1 text-slate-800">
-                <span className="text-3xl font-extrabold">₹12,499</span>
-                <span className="text-xs text-slate-400 font-semibold">/month</span>
-              </div>
-              <p className="text-xs text-slate-500 font-semibold mt-3">Unlimited AI Ingestions & full Tally ERP Integration placeholders.</p>
-              
-              <ul className="mt-6 space-y-3">
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Unlimited Warehouses</span>
-                </li>
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Tally ERP Synchronization Placeholders</span>
-                </li>
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Dedicated Server Instance & 24/7 SLA</span>
-                </li>
-              </ul>
-            </div>
-            
-            <Link href="/auth" className="mt-8 w-full py-2.5 bg-slate-850 hover:bg-slate-950 text-white font-bold rounded-xl text-xs text-center transition-all cursor-pointer block">
-              Contact Sales
-            </Link>
-          </div>
-
-        </div>
-      </section>
-
-      {/* 6. Footer */}
-      <footer className="border-t border-slate-100 bg-white py-12 px-6 text-center">
-        <p className="text-[11px] text-slate-400 font-semibold">
-          © 2026 DistributorOS. All rights reserved. Supply chain control pipelines engineered for modern distributors.
-        </p>
-      </footer>
-
+        <Link href="/auth" style={{background: '#10b981', color: '#ffffff', fontWeight: 700, fontSize: 14, padding: '11px 20px', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'none'}}>Start Free Trial</Link>
+      </React.Fragment>)}
     </div>
+    {navOpen && (<React.Fragment>
+      <div style={{display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 24px 18px'}}>
+        <a href="#problem" style={{color: '#e2e8f0', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>Problem</a>
+        <a href="#how" style={{color: '#e2e8f0', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>How it Works</a>
+        <a href="#features" style={{color: '#e2e8f0', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>Features</a>
+        <a href="#pricing" style={{color: '#e2e8f0', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>Pricing</a>
+        <a href="#faq" style={{color: '#e2e8f0', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>FAQ</a>
+        <Link href="/auth" style={{color: '#e2e8f0', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>
+          Login
+        </Link>
+        <Link href="/auth" style={{color: '#10b981', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0'}}>
+          Get Started Free
+        </Link>
+      </div>
+    </React.Fragment>)}
+  </div>
+
+  {/* HERO */}
+  <div style={{background: 'linear-gradient(180deg, #0f172a 0%, #111c33 100%)', padding: 'clamp(48px,7vw,96px) 24px clamp(64px,9vw,110px)'}}>
+    <div style={{maxWidth: 1200, margin: '0 auto', display: 'flex', flexWrap: 'wrap', gap: 56, alignItems: 'center'}}>
+      <div style={{flex: '1 1 460px', minWidth: 300}}>
+        <div style={{display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', color: '#34d399', fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 999, marginBottom: 22}}>
+          <span>🟢</span> Built for Indian FMCG Distributors
+        </div>
+        <div style={{fontSize: 'clamp(34px, 5vw, 58px)', fontWeight: 900, color: '#ffffff', lineHeight: 1.08, letterSpacing: '-0.02em', marginBottom: 22}}>
+          Turn WhatsApp Orders into a <span style={{color: '#10b981'}}>Business System</span> — Automatically
+        </div>
+        <div style={{fontSize: 'clamp(16px, 2vw, 19px)', color: '#94a3b8', lineHeight: 1.6, maxWidth: 560, marginBottom: 34}}>
+          Your retailers message you on WhatsApp. DistributorOS reads it, creates the order, updates inventory, and sends them a payment link. You do nothing.
+        </div>
+        <div style={{display: 'flex', flexWrap: 'wrap', gap: 14}}>
+          <Link href="/auth" style={{background: '#10b981', color: '#ffffff', fontWeight: 700, fontSize: 16, padding: '16px 28px', borderRadius: 10, cursor: 'pointer', boxShadow: '0 8px 24px rgba(16,185,129,0.35)', textDecoration: 'none'}}>Start Free Trial →</Link>
+          <a href="#how" style={{textDecoration: 'none', border: '1.5px solid rgba(255,255,255,0.25)', color: '#ffffff', fontWeight: 700, fontSize: 16, padding: '16px 28px', borderRadius: 10, textAlign: 'center'}}>See How It Works</a>
+        </div>
+        <div style={{marginTop: 28, color: '#64748b', fontSize: 13}}>No credit card needed · 15-day free trial · Setup in 10 minutes</div>
+      </div>
+
+      <div style={{flex: '1 1 380px', minWidth: 300, display: 'flex', justifyContent: 'center', position: 'relative'}}>
+        <div style={{animation: 'floatUpDown 4.5s ease-in-out infinite', position: 'relative', width: '100%', maxWidth: 400}}>
+          {/* phone frame */}
+          <div style={{background: '#1e293b', borderRadius: 30, padding: 12, boxShadow: '0 30px 70px rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.06)'}}>
+            <div style={{background: '#0b141a', borderRadius: 20, overflow: 'hidden'}}>
+              <div style={{background: '#075e54', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10}}>
+                <div style={{width: 30, height: 30, borderRadius: '50%', background: '#128c7e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14}}>🏪</div>
+                <div>
+                  <div style={{color: '#ffffff', fontSize: 13, fontWeight: 700}}>Sharma General Store</div>
+                  <div style={{color: '#cfe9e4', fontSize: 10}}>online</div>
+                </div>
+              </div>
+              <div style={{background: '#0b141a', padding: 16, minHeight: 200, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 10}}>
+                <div style={{alignSelf: 'flex-start', background: '#1f2c34', color: '#e9edef', fontSize: 13, padding: '9px 13px', borderRadius: '10px 10px 10px 2px', maxWidth: '82%', animation: 'heroBubbleIn 5.5s ease infinite'}}>
+                  bhaiya 50 units rin soap bhejo 🙏
+                </div>
+                <div style={{alignSelf: 'flex-end', background: '#005c4b', color: '#e9edef', fontSize: 13, padding: '9px 13px', borderRadius: '10px 10px 2px 10px', maxWidth: '82%', animation: 'heroBubbleIn 5.5s ease infinite', animationDelay: '0.4s'}}>
+                  ✅ Order confirmed! Pay here: rzp.io/i/os4
+                </div>
+              </div>
+            </div>
+          </div>
+          {/* floating dashboard order card */}
+          <div style={{position: 'absolute', right: -18, bottom: 30, width: 210, background: '#ffffff', borderRadius: 14, padding: 14, boxShadow: '0 20px 45px rgba(0,0,0,0.35)', animation: 'heroOrder 5.5s ease infinite'}}>
+            <div style={{display: 'flex', alignItems: 'center', gap: 6, color: '#10b981', fontSize: 11, fontWeight: 700, marginBottom: 8}}>
+              <span>●</span> NEW ORDER SYNCED
+            </div>
+            <div style={{fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 4}}>Rin Soap × 50 units</div>
+            <div style={{fontSize: 12, color: '#64748b', marginBottom: 8}}>Sharma General Store</div>
+            <div style={{display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #e2e8f0', paddingTop: 8}}>
+              <span style={{fontSize: 11, color: '#94a3b8'}}>Amount</span>
+              <span style={{fontSize: 13, fontWeight: 800, color: '#0f172a'}}>₹1,250</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {/* PROBLEM */}
+  <div id="problem" ref={ refProblem } style={{padding: 'clamp(56px,8vw,110px) 24px', background: '#ffffff'}}>
+    <div style={{maxWidth: 1100, margin: '0 auto'}}>
+      <div style={{textAlign: 'center', maxWidth: 640, margin: '0 auto 52px'}}>
+        <div style={{color: '#10b981', fontWeight: 700, fontSize: 14, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 12}}>The Problem</div>
+        <div style={{fontSize: 'clamp(26px,3.4vw,40px)', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em'}}>Running orders on WhatsApp alone is chaos</div>
+      </div>
+      <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 24}}>
+        {problems && problems.map((item, i) => (<React.Fragment key={i}>
+          <div style={ item.style }>
+            <div style={{width: 52, height: 52, borderRadius: 12, background: '#ffffff', border: '1px solid #eef2f7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, marginBottom: 20}}>{ item.icon }</div>
+            <div style={{fontSize: 19, fontWeight: 700, color: '#0f172a', marginBottom: 10}}>{ item.title }</div>
+            <div style={{fontSize: 15, color: '#64748b', lineHeight: 1.55}}>{ item.desc }</div>
+          </div>
+        </React.Fragment>))}
+      </div>
+    </div>
+  </div>
+
+  {/* HOW IT WORKS */}
+  <div id="how" ref={ refHow } style={{padding: 'clamp(56px,8vw,110px) 24px', background: '#0f172a'}}>
+    <div style={{maxWidth: 1100, margin: '0 auto'}}>
+      <div style={{textAlign: 'center', maxWidth: 640, margin: '0 auto 60px'}}>
+        <div style={{color: '#34d399', fontWeight: 700, fontSize: 14, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 12}}>How It Works</div>
+        <div style={{fontSize: 'clamp(26px,3.4vw,40px)', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em'}}>From a WhatsApp message to a reconciled payment</div>
+      </div>
+      <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 32}}>
+        {steps && steps.map((item, i) => (<React.Fragment key={i}>
+          <div style={ item.style }>
+            <div style={{fontSize: 46, fontWeight: 900, color: 'rgba(16,185,129,0.35)', lineHeight: 1, marginBottom: 18}}>{ item.num }</div>
+            <div style={{fontSize: 18, fontWeight: 700, color: '#ffffff', marginBottom: 10}}>{ item.title }</div>
+            <div style={{fontSize: 14.5, color: '#94a3b8', lineHeight: 1.6}}>{ item.desc }</div>
+          </div>
+        </React.Fragment>))}
+      </div>
+    </div>
+  </div>
+
+  {/* FEATURES */}
+  <div id="features" ref={ refFeatures } style={{padding: 'clamp(56px,8vw,110px) 24px', background: '#ffffff'}}>
+    <div style={{maxWidth: 1100, margin: '0 auto'}}>
+      <div style={{textAlign: 'center', maxWidth: 640, margin: '0 auto 52px'}}>
+        <div style={{color: '#10b981', fontWeight: 700, fontSize: 14, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 12}}>Features</div>
+        <div style={{fontSize: 'clamp(26px,3.4vw,40px)', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em'}}>Everything your business runs on, automated</div>
+      </div>
+      <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20}}>
+        {features && features.map((item, i) => (<React.Fragment key={i}>
+          <div style={ item.style }>
+            <div style={{width: 48, height: 48, borderRadius: 12, background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0}}>{ item.icon }</div>
+            <div>
+              <div style={{fontSize: 17, fontWeight: 700, color: '#0f172a', marginBottom: 6}}>{ item.title }</div>
+              <div style={{fontSize: 14.5, color: '#64748b', lineHeight: 1.55}}>{ item.desc }</div>
+            </div>
+          </div>
+        </React.Fragment>))}
+      </div>
+    </div>
+  </div>
+
+  {/* SOCIAL PROOF */}
+  <div id="proof" ref={ refProof } style={{padding: 'clamp(56px,8vw,100px) 24px', background: '#f8fafc'}}>
+    <div style={{maxWidth: 1100, margin: '0 auto'}}>
+      <div style={{textAlign: 'center', marginBottom: 52}}>
+        <div style={{fontSize: 'clamp(24px,3.2vw,36px)', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em'}}>
+          Join <span style={{color: '#10b981'}}>{ statDistributors }+</span> distributors managing <span style={{color: '#10b981'}}>₹{ statCrores } Cr+</span> in monthly orders
+        </div>
+      </div>
+      <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 22}}>
+        {testimonials && testimonials.map((item, i) => (<React.Fragment key={i}>
+          <div style={ item.style }>
+            <div style={{color: '#f59e0b', fontSize: 14, marginBottom: 14}}>★★★★★</div>
+            <div style={{fontSize: 15, color: '#334155', lineHeight: 1.6, marginBottom: 20}}>"{ item.quote }"</div>
+            <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
+              <div style={{width: 40, height: 40, borderRadius: '50%', background: '#0f172a', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 15}}>{ item.initial }</div>
+              <div>
+                <div style={{fontSize: 14, fontWeight: 700, color: '#0f172a'}}>{ item.name }</div>
+                <div style={{fontSize: 13, color: '#94a3b8'}}>{ item.city }</div>
+              </div>
+            </div>
+          </div>
+        </React.Fragment>))}
+      </div>
+    </div>
+  </div>
+
+  {/* LIVE DEMO */}
+  <div style={{padding: 'clamp(56px,8vw,110px) 24px', background: '#0f172a'}}>
+    <div style={{maxWidth: 900, margin: '0 auto'}}>
+      <div style={{textAlign: 'center', maxWidth: 640, margin: '0 auto 48px'}}>
+        <div style={{color: '#34d399', fontWeight: 700, fontSize: 14, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 12}}>See It In Action</div>
+        <div style={{fontSize: 'clamp(26px,3.4vw,38px)', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em'}}>Watch a real order happen, live</div>
+      </div>
+      <div style={{display: 'flex', flexWrap: 'wrap', gap: 28, alignItems: 'center', justifyContent: 'center'}}>
+        <div style={{flex: '1 1 320px', maxWidth: 380, background: '#0b141a', borderRadius: 18, padding: 20, border: '1px solid rgba(255,255,255,0.08)'}}>
+          <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16}}>
+            <div style={{width: 28, height: 28, borderRadius: '50%', background: '#25D366', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13}}>💬</div>
+            <div style={{color: '#cbd5e1', fontSize: 13, fontWeight: 600}}>WhatsApp — Retailer</div>
+          </div>
+          <div style={{background: '#1f2c34', borderRadius: '10px 10px 10px 2px', padding: '14px 16px', minHeight: 46, color: '#e9edef', fontSize: 15}}>
+            { demoTyped }<span style={{animation: 'blinkCursor 1s step-start infinite'}}>|</span>
+          </div>
+        </div>
+        <div style={{fontSize: 26, color: '#475569'}}>→</div>
+        <div style={{flex: '1 1 300px', maxWidth: 320}}>
+          {demoShowOrder && (<React.Fragment>
+            <div style={ demoOrderStyle }>
+              <div style={{display: 'flex', alignItems: 'center', gap: 6, color: '#10b981', fontSize: 11, fontWeight: 700, marginBottom: 10}}>
+                <span>●</span> ORDER CREATED
+              </div>
+              <div style={{fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 4}}>Rin Soap × 50 units</div>
+              <div style={{fontSize: 13, color: '#64748b', marginBottom: 10}}>Sharma General Store · Kanpur</div>
+              <div style={{display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #e2e8f0', paddingTop: 10, marginBottom: 8}}>
+                <span style={{fontSize: 12, color: '#94a3b8'}}>Amount</span>
+                <span style={{fontSize: 14, fontWeight: 800, color: '#0f172a'}}>₹1,250</span>
+              </div>
+              <div style={{background: '#ecfdf5', color: '#059669', fontSize: 12, fontWeight: 700, padding: '8px 10px', borderRadius: 8, textAlign: 'center'}}>Payment link sent via WhatsApp ✓</div>
+            </div>
+          </React.Fragment>)}
+          {demoShowOrderNot && (<React.Fragment>
+            <div style={{border: '1.5px dashed rgba(255,255,255,0.15)', borderRadius: 16, padding: '40px 20px', textAlign: 'center', color: '#475569', fontSize: 13}}>Order will appear here</div>
+          </React.Fragment>)}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {/* PRICING */}
+  <div id="pricing" ref={ refPricing } style={{padding: 'clamp(56px,8vw,110px) 24px', background: '#ffffff'}}>
+    <div style={{maxWidth: 1100, margin: '0 auto'}}>
+      <div style={{textAlign: 'center', maxWidth: 640, margin: '0 auto 52px'}}>
+        <div style={{color: '#10b981', fontWeight: 700, fontSize: 14, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 12}}>Pricing</div>
+        <div style={{fontSize: 'clamp(26px,3.4vw,40px)', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em'}}>Simple pricing, no surprises</div>
+      </div>
+      <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24, alignItems: 'stretch'}}>
+        {pricingPlans && pricingPlans.map((item, i) => (<React.Fragment key={i}>
+          <div style={ item.style }>
+            {item.highlight && (<React.Fragment>
+              <div style={{background: '#10b981', color: '#ffffff', fontSize: 12, fontWeight: 700, padding: '5px 14px', borderRadius: 999, display: 'inline-block', marginBottom: 16, alignSelf: 'flex-start'}}>MOST POPULAR</div>
+            </React.Fragment>)}
+            <div style={{fontSize: 18, fontWeight: 700, color: item.textColor, marginBottom: 6}}>{ item.name }</div>
+            <div style={{display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 24}}>
+              <span style={{fontSize: 36, fontWeight: 900, color: item.textColor}}>{ item.price }</span>
+              <span style={{fontSize: 14, color: item.subColor}}>{ item.period }</span>
+            </div>
+            <div style={{display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 28, flex: 1}}>
+              {item.features && item.features.map((f, i) => (<React.Fragment key={i}>
+                <div style={{display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 14, color: item.subColor}}>
+                  <span style={{color: '#10b981', fontWeight: 700}}>✓</span> { f }
+                </div>
+              </React.Fragment>))}
+            </div>
+            <Link href="/auth" style={{background: item.btnBg, color: item.btnColor, fontWeight: 700, fontSize: 15, padding: 14, borderRadius: 10, cursor: 'pointer', textAlign: 'center', textDecoration: 'none', display: 'block'}}>{ item.cta }</Link>
+          </div>
+        </React.Fragment>))}
+      </div>
+    </div>
+  </div>
+
+  {/* FAQ */}
+  <div id="faq" ref={ refFaq } style={{padding: 'clamp(56px,8vw,110px) 24px', background: '#f8fafc'}}>
+    <div style={{maxWidth: 760, margin: '0 auto'}}>
+      <div style={{textAlign: 'center', marginBottom: 44}}>
+        <div style={{color: '#10b981', fontWeight: 700, fontSize: 14, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 12}}>FAQ</div>
+        <div style={{fontSize: 'clamp(26px,3.4vw,36px)', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em'}}>Common questions</div>
+      </div>
+      <div style={{display: 'flex', flexDirection: 'column', gap: 12}}>
+        {faqs && faqs.map((item, i) => (<React.Fragment key={i}>
+          <div style={{background: '#ffffff', border: '1px solid #eef2f7', borderRadius: 14, overflow: 'hidden'}}>
+            <div onClick={item.toggle} style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 22px', cursor: 'pointer'}}>
+              <div style={{fontSize: 15.5, fontWeight: 700, color: '#0f172a'}}>{ item.q }</div>
+              <div style={{fontSize: 20, color: '#10b981', fontWeight: 300, flexShrink: 0, marginLeft: 12}}>{ item.symbol }</div>
+            </div>
+            {item.open && (<React.Fragment>
+              <div style={{padding: '0 22px 20px', fontSize: 14.5, color: '#64748b', lineHeight: 1.6}}>{ item.a }</div>
+            </React.Fragment>)}
+          </div>
+        </React.Fragment>))}
+      </div>
+    </div>
+  </div>
+
+  {/* FOOTER */}
+  <div style={{background: '#0f172a', padding: '56px 24px 32px'}}>
+    <div style={{maxWidth: 1100, margin: '0 auto'}}>
+      <div style={{display: 'flex', flexWrap: 'wrap', gap: 40, justifyContent: 'space-between', paddingBottom: 32, borderBottom: '1px solid rgba(255,255,255,0.08)'}}>
+        <div style={{flex: '1 1 260px', maxWidth: 340}}>
+          <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14}}>
+            <div style={{width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, #10b981, #0ea371)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16}}>💬</div>
+            <div style={{fontWeight: 800, fontSize: 17, color: '#ffffff'}}>Distributor<span style={{color: '#10b981'}}>OS</span></div>
+          </div>
+          <div style={{color: '#64748b', fontSize: 14, lineHeight: 1.6}}>Your distributor's WhatsApp is now a full business.</div>
+        </div>
+        <div style={{display: 'flex', gap: 60, flexWrap: 'wrap'}}>
+          <div>
+            <div style={{color: '#ffffff', fontSize: 13, fontWeight: 700, marginBottom: 14}}>Company</div>
+            <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
+              <a href="#" style={{color: '#94a3b8', textDecoration: 'none', fontSize: 14}}>Privacy</a>
+              <a href="#" style={{color: '#94a3b8', textDecoration: 'none', fontSize: 14}}>Terms</a>
+              <Link href="/auth" style={{color: '#94a3b8', fontSize: 14, cursor: 'pointer', textDecoration: 'none'}}>Contact</Link>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style={{paddingTop: 24, textAlign: 'center', color: '#475569', fontSize: 13}}>Made for Indian distributors 🇮🇳 · © 2026 DistributorOS</div>
+    </div>
+  </div>
+
+
+
+</div>
   );
 }

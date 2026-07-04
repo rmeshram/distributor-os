@@ -6,8 +6,10 @@ import DashboardHeader from "@/components/DashboardHeader";
 import MetricCards from "@/components/MetricCards";
 import RecentOrders from "@/components/RecentOrders";
 import CollectionsDonut from "@/components/CollectionsDonut";
-import LiveDeliveries from "@/components/LiveDeliveries";
+// LiveDeliveries import removed 2026-06-28 — replaced by DemandGapCard in the bottom grid.
+// The component file (LiveDeliveries.tsx) is preserved on disk for future use.
 import InventorySummary from "@/components/InventorySummary";
+import DemandGapCard from "@/components/DemandGapCard";
 import ActivityFeed from "@/components/ActivityFeed";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import ErrorBanner from "@/components/ui/ErrorBanner";
@@ -295,10 +297,11 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* C. Bottom Operational Grid (Live Map, Stock Summary, Activity Feed) */}
+              {/* C. Bottom Operational Grid (Demand Gap, Stock Summary, Activity Feed) */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="min-h-[300px]">
-                  <LiveDeliveries viewAllHref="/dashboard/shipments" />
+                  {/* DemandGapCard replaces LiveDeliveries (2026-06-28) */}
+                  <DemandGapCard activeTenantId={tenantId} />
                 </div>
                 <div className="min-h-[300px]">
                   <InventorySummary data={metrics || undefined} />

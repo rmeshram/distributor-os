@@ -29,8 +29,13 @@ interface OrderItem {
   category: string;
   pack_size: string;
   quantity: number;
+  allocated_quantity: number | null;
   unit_price: number;
   total_price: number;
+  raw_source_text?: string;
+  product_id?: string | null;
+  isResolvedLocally?: boolean;
+  resolvedSkuCode?: string;
 }
 
 interface OrderRow {
@@ -45,6 +50,8 @@ interface OrderRow {
   payment_status: string;
   amount_paid: number;
   invoice_type: InvoiceType;
+  raw_source_text?: string;
+  line_items?: any[];
 }
 
 export default function OrdersPage() {
@@ -55,6 +62,8 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditingInvoiceType, setIsEditingInvoiceType] = useState(false);
+  const [riskAssessment, setRiskAssessment] = useState<any>(null);
+  const [riskLoading, setRiskLoading] = useState(false);
 
   // Bulk Job States
   const [bulkJobId, setBulkJobId] = useState<string | null>(null);
@@ -70,8 +79,10 @@ export default function OrdersPage() {
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<OrderItem[] | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isMarkingDelivered, setIsMarkingDelivered] = useState(false);
   const [productsList, setProductsList] = useState<any[]>([]);
   const [resolvingItemId, setResolvingItemId] = useState<string | null>(null);
+  const [editedLineItems, setEditedLineItems] = useState<any[]>([]);
   const [selectedOrderPayments, setSelectedOrderPayments] = useState<{
     payment_status: string;
     payments_allocated: {
@@ -82,6 +93,7 @@ export default function OrdersPage() {
       reference_number: string | null;
       created_at: string;
     }[];
+    invoice_id?: string | null;
   } | null>(null);
 
   const [total, setTotal] = useState(0);
@@ -95,6 +107,27 @@ export default function OrdersPage() {
     message: "",
     type: "success"
   });
+
+  const foundOrder = orders.find(o => o.id === selectedOrderId);
+  const selectedOrder = foundOrder
+    ? {
+        ...foundOrder,
+        line_items: selectedOrderDetails || undefined
+      }
+    : null;
+
+ useEffect(() => {
+  if (selectedOrder && selectedOrder.line_items && selectedOrder.line_items.length > 0) {
+    setEditedLineItems(prev => {
+      const firstPrevId = prev[0]?.id;
+      const firstNewId = selectedOrder.line_items![0]?.id;
+      if (firstPrevId !== firstNewId) {
+        return selectedOrder.line_items!;
+      }
+      return prev;
+    });
+  }
+}, [selectedOrder]);
 
   const showToast = (message: string, type: "success" | "error") => {
     setToast({ show: true, message, type });
@@ -216,6 +249,45 @@ export default function OrdersPage() {
   };
 
 
+  useEffect(() => {
+    if (!selectedOrderId) {
+      setRiskAssessment(null);
+      return;
+    }
+    const orderToAssess = orders.find(o => o.id === selectedOrderId);
+    if (!orderToAssess) return;
+    
+    const status = orderToAssess.status;
+    const isPendingOrDraft = status === "Pending" || status === "Draft" || status === "Needs Review";
+    
+    if (isPendingOrDraft) {
+      const fetchRiskAssessment = async () => {
+        setRiskLoading(true);
+        try {
+          const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+          const resp = await fetch(`${apiBase}/api/v1/orders/${selectedOrderId}/risk-assessment`, {
+            credentials: "include"
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            setRiskAssessment(data);
+          } else {
+            setRiskAssessment(null);
+          }
+        } catch (err) {
+          console.error(err);
+          setRiskAssessment(null);
+        } finally {
+          setRiskLoading(false);
+        }
+      };
+      fetchRiskAssessment();
+    } else {
+      setRiskAssessment(null);
+    }
+  }, [selectedOrderId, orders]);
+
+
   const fetchOrderDetails = async (orderId: string) => {
     setLoadingDetails(true);
     try {
@@ -263,54 +335,93 @@ export default function OrdersPage() {
     setIsConfirming(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const response = await fetch(`${apiBase}/api/v1/orders/${selectedOrderId}/status`, {
-        method: "PUT",
+
+      // Collect all locally-staged resolutions into the batch payload matching backend schema
+      const resolved_items = editedLineItems
+        .filter(item => item.product_id !== null && item.product_id !== undefined)
+        .map(item => ({
+          item_id: item.id,
+          product_id: item.product_id,
+        }));
+
+      // Single atomic request: resolve staged items + confirm + self-learning in one shot
+      const response = await fetch(`${apiBase}/api/v1/orders/${selectedOrderId}/batch-confirm`, {
+        method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to_status: "Confirmed" })
+        body: JSON.stringify({
+          invoice_type: selectedOrder?.invoice_type || "UNSPECIFIED",
+          resolved_items,
+        }),
       });
       const data = await response.json();
       if (response.ok) {
-        showToast("Order status updated to Confirmed successfully!", "success");
-        handleCloseDetails();
-        fetchOrders(activeTenantId);
-
+        showToast("Order confirmed successfully!", "success");
+        await fetchOrders(activeTenantId);
+        await fetchOrderDetails(selectedOrderId);
       } else {
         const errorDetail = data.detail || "Failed to confirm order.";
         showToast(errorDetail, "error");
       }
-    } catch (err) {
-      showToast("Network connection breakdown during order confirmation.", "error");
+    } catch (err: any) {
+      showToast(err.message || "Network connection breakdown during order confirmation.", "error");
     } finally {
       setIsConfirming(false);
     }
   };
 
-  const handleResolveItem = async (itemId: string, skuCode: string, quantity: number) => {
-    setResolvingItemId(itemId);
+  const handleMarkDelivered = async () => {
+    if (!selectedOrderId) return;
+    setIsMarkingDelivered(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const response = await fetch(`${apiBase}/api/v1/orders/items/${itemId}/resolve`, {
-        method: "PATCH",
+      const response = await fetch(`${apiBase}/api/v1/orders/${selectedOrderId}/delivery-event`, {
+        method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sku_code: skuCode, quantity })
+        body: JSON.stringify({
+          status: "delivered",
+          source: "manual",
+          tenant_id: activeTenantId
+        })
       });
       const data = await response.json();
       if (response.ok) {
-        showToast("Order line item manually resolved successfully!", "success");
+        showToast("Order marked as delivered. Customer notified.", "success");
         handleCloseDetails();
         fetchOrders(activeTenantId);
-
       } else {
-        const errorDetail = data.detail || "Failed to resolve order item.";
+        const errorDetail = data.detail || "Failed to mark order as delivered.";
         showToast(errorDetail, "error");
       }
-    } catch (err) {
-      showToast("Network connection breakdown during order item resolution.", "error");
+    } catch (err: any) {
+      showToast(err.message || "Network connection error while marking order as delivered.", "error");
     } finally {
-      setResolvingItemId(null);
+      setIsMarkingDelivered(false);
     }
+  };
+
+  const handleProductChange = (itemId: string, selectedProductId: string) => {
+    const targetProduct = productsList.find(p => p.id === selectedProductId);
+    setEditedLineItems((prevItems) =>
+      prevItems.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              product_id: selectedProductId,
+              unmatched_raw_text: null,
+              sku_id: targetProduct ? targetProduct.sku_id : item.sku_id,
+              brand: targetProduct ? targetProduct.brand : item.brand,
+              category: targetProduct ? targetProduct.category : item.category,
+              pack_size: targetProduct ? targetProduct.pack_size : item.pack_size,
+              unit_price: targetProduct ? targetProduct.base_price : item.unit_price,
+              total_price: targetProduct ? item.quantity * targetProduct.base_price : item.total_price,
+              isResolvedLocally: true,
+              resolvedSkuCode: targetProduct ? targetProduct.sku_id : undefined,
+            }
+          : item
+      )
+    );
   };
 
   const handleUpdateInvoiceType = async (orderId: string, newType: InvoiceType) => {
@@ -350,10 +461,10 @@ export default function OrdersPage() {
             GST Bill
           </span>
         );
-      case InvoiceTypes.NORMAL:
+      case InvoiceTypes.RETAIL:
         return (
           <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none bg-blue-50 text-blue-700 border border-blue-200 shadow-sm">
-            Normal Bill
+            Retail Bill
           </span>
         );
       default:
@@ -440,7 +551,6 @@ export default function OrdersPage() {
     }
   };
 
-  const selectedOrder = orders.find(o => o.id === selectedOrderId);
 
   // Status Filter Counts
   const countAll = orders.length;
@@ -686,14 +796,29 @@ export default function OrdersPage() {
                           {formatCurrency(order.amount)}
                         </td>
                         <td className="py-4 px-6 text-center">
-                          <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none ${order.status === "Confirmed"
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                              : order.status === "Needs Review"
-                                ? "bg-rose-50 text-rose-700 border border-rose-200"
-                                : "bg-amber-50 text-amber-700 border border-amber-200"
-                            }`}>
-                            {order.status}
-                          </span>
+                          {(() => {
+                            const totalRequested = order.line_items?.reduce((sum: number, i: any) => sum + i.quantity, 0) || 0;
+                            const totalAllocated = order.line_items?.reduce((sum: number, i: any) => sum + (i.allocated_quantity !== null && i.allocated_quantity !== undefined ? i.allocated_quantity : i.quantity), 0) || 0;
+                            const hasShortfall = totalAllocated < totalRequested;
+                            if (order.status === "Confirmed" && hasShortfall) {
+                              return (
+                                <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none bg-amber-50 text-amber-700 border border-amber-200">
+                                  Confirmed ({totalAllocated} of {totalRequested} allocated)
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none ${
+                                order.status === "Confirmed"
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  : order.status === "Needs Review"
+                                  ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                  : "bg-amber-50 text-amber-700 border border-amber-200"
+                              }`}>
+                                {order.status}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="py-4 px-6 text-center">
                           <span className={`inline-flex items-center justify-center w-24 px-2.5 py-1 rounded-full text-xs font-bold leading-none ${order.payment_status === "PAID"
@@ -766,7 +891,7 @@ export default function OrdersPage() {
                   <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
                   <span className="text-sm font-semibold text-slate-500">Loading line items...</span>
                 </div>
-              ) : selectedOrderDetails ? (
+              ) : editedLineItems && editedLineItems.length > 0 ? (
                 <>
                   {/* Order Overview / Settings */}
                   <div className="bg-slate-50/50 border border-dashboard-border rounded-xl p-4 mb-4 space-y-3 relative z-30">
@@ -792,15 +917,15 @@ export default function OrdersPage() {
                             className="p-1 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 font-bold focus:outline-none focus:ring-2 focus:ring-brand-blue cursor-pointer z-40 relative shadow-sm"
                           >
                             <option value={InvoiceTypes.GST}>GST Tax Invoice</option>
-                            <option value={InvoiceTypes.NORMAL}>Normal Cash Bill</option>
+                            <option value={InvoiceTypes.RETAIL}>Retail Tax Invoice</option>
                             <option value={InvoiceTypes.UNSPECIFIED}>Unspecified</option>
                           </select>
                         ) : (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1">
                             {renderInvoiceTypeBadge(selectedOrder?.invoice_type || InvoiceTypes.UNSPECIFIED)}
                             <button
                               onClick={() => setIsEditingInvoiceType(true)}
-                              className="text-xs font-bold text-brand-blue hover:text-brand-blueHover hover:underline focus:outline-none cursor-pointer"
+                              className="text-[10px] font-bold text-brand-blue hover:text-brand-blueHover cursor-pointer underline decoration-dotted"
                             >
                               Edit
                             </button>
@@ -810,9 +935,22 @@ export default function OrdersPage() {
                     </div>
                   </div>
 
+                  {selectedOrder?.raw_source_text && (
+                    <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-sm text-gray-700 italic my-3 flex items-start gap-2">
+                      <MessageSquare className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                      <div>
+                        <span className="font-bold text-xs text-slate-500 uppercase not-italic block mb-0.5">Original Message:</span>
+                        "{selectedOrder.raw_source_text}"
+                      </div>
+                    </div>
+                  )}
+
                   <h4 className="font-bold text-slate-800 text-sm border-b pb-2 mb-3">Line Items</h4>
-                  {selectedOrderDetails.map((item, idx) => {
+                  {editedLineItems.map((item, idx) => {
                     const isUnmatched = item.sku_id === "UNMATCHED_SKU" || item.sku_id === "UNMATCHED_TRIAGE_SKU";
+                    // Line total = allocated_quantity * unit_price (not full quantity)
+                    const displayQty = item.allocated_quantity ?? item.quantity;
+                    const lineTotal = displayQty * item.unit_price;
                     return (
                       <div key={idx} className="p-4 rounded-xl border border-dashboard-border bg-slate-50/50 flex flex-col justify-between gap-2">
                         <div className="flex items-start justify-between">
@@ -828,17 +966,13 @@ export default function OrdersPage() {
                                 </p>
                                 <label className="block text-[10px] font-bold text-slate-400 uppercase">Map to Catalog SKU</label>
                                 <select
-                                  disabled={resolvingItemId === item.id}
-                                  onChange={(e) => {
-                                    if (e.target.value) {
-                                      handleResolveItem(item.id, e.target.value, item.quantity);
-                                    }
-                                  }}
+                                  value={item.product_id || ""}
+                                  onChange={(e) => handleProductChange(item.id, e.target.value)}
                                   className="w-full mt-1 p-2 border border-rose-200 rounded-lg text-xs bg-white text-slate-700 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer animate-pulse"
                                 >
                                   <option value="">-- Select SKU --</option>
                                   {productsList.map((p) => (
-                                    <option key={p.id} value={p.sku_id}>
+                                    <option key={p.id} value={p.id}>
                                       {p.sku_id} - {p.brand} {p.category} ({p.pack_size})
                                     </option>
                                   ))}
@@ -851,14 +985,22 @@ export default function OrdersPage() {
                               </>
                             )}
                           </div>
-                          <div className="flex flex-col items-end shrink-0">
-                            <span className="text-xs font-bold text-slate-500">Qty: {item.quantity}</span>
+                          <div className="flex flex-col items-end shrink-0 text-right text-xs font-bold text-slate-500">
+                            {/* Show allocated quantity if partial, otherwise show full quantity */}
+                            {item.allocated_quantity !== null && item.allocated_quantity !== undefined && item.allocated_quantity < item.quantity ? (
+                              <span>
+                                <span className="line-through text-gray-400">{item.quantity}</span>
+                                {" "}{item.allocated_quantity} allocated
+                              </span>
+                            ) : (
+                              <span>{item.allocated_quantity ?? item.quantity}</span>
+                            )}
                           </div>
                         </div>
 
                         <div className="flex items-center justify-between border-t border-dashed border-slate-200 pt-2 mt-1">
                           <span className="text-xs text-slate-400">Rate: {formatCurrency(item.unit_price)}</span>
-                          <span className="text-sm font-bold text-slate-800">{formatCurrency(item.total_price)}</span>
+                          <span className="text-sm font-bold text-slate-800">{formatCurrency(lineTotal)}</span>
                         </div>
                       </div>
                     );
@@ -868,15 +1010,15 @@ export default function OrdersPage() {
                   <div className="border-t border-slate-200 pt-4 mt-6 space-y-2 text-sm">
                     <div className="flex justify-between text-slate-500 font-medium">
                       <span>Subtotal</span>
-                      <span>{formatCurrency(selectedOrderDetails.reduce((a, b) => a + b.total_price, 0) / 1.18)}</span>
+                      <span>{formatCurrency(editedLineItems.reduce((a, b) => a + b.total_price, 0) / 1.18)}</span>
                     </div>
                     <div className="flex justify-between text-slate-500 font-medium">
                       <span>GST (18%)</span>
-                      <span>{formatCurrency(selectedOrderDetails.reduce((a, b) => a + b.total_price, 0) * 0.18 / 1.18)}</span>
+                      <span>{formatCurrency(editedLineItems.reduce((a, b) => a + b.total_price, 0) * 0.18 / 1.18)}</span>
                     </div>
                     <div className="flex justify-between text-base font-extrabold text-slate-800 pt-2 border-t border-dashed">
                       <span>Total Amount</span>
-                      <span>{formatCurrency(selectedOrderDetails.reduce((a, b) => a + b.total_price, 0))}</span>
+                      <span>{formatCurrency(editedLineItems.reduce((a, b) => a + b.total_price, 0))}</span>
                     </div>
                   </div>
 
@@ -930,52 +1072,170 @@ export default function OrdersPage() {
             </div>
 
             {/* Footer Buttons */}
-            <div className="p-6 border-t border-dashboard-border bg-slate-50 flex items-center justify-between gap-3">
-              {selectedOrder && (selectedOrder.status === "Draft" || selectedOrder.status === "Pending" || selectedOrder.status === "Confirmed") ? (
-                <button
-                  onClick={() => setIsCancelDialogOpen(true)}
-                  className="px-4 py-2.5 bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 text-sm font-bold rounded-lg transition-all cursor-pointer"
-                >
-                  Cancel Order
-                </button>
-              ) : (
-                <div />
-              )}
-              {selectedOrder && selectedOrder.status === "Pending" ? (
-                <button
-                  onClick={handleConfirmOrder}
-                  disabled={isConfirming}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
-                >
-                  {isConfirming ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Confirming...</span>
-                    </>
-                  ) : (
-                    <span>Confirm Order</span>
+            <div className="p-6 border-t border-dashboard-border bg-slate-50 flex flex-col gap-3">
+              {riskAssessment && selectedOrder?.status !== "Confirmed" && (
+                <div className={`rounded-lg p-4 mb-4 border ${
+                  riskAssessment.level === "high_risk" 
+                    ? "bg-red-50 border-red-200" 
+                    : riskAssessment.level === "caution"
+                    ? "bg-yellow-50 border-yellow-200"
+                    : "bg-green-50 border-green-200"
+                }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">
+                      {riskAssessment.level === "high_risk" ? "🔴" : riskAssessment.level === "caution" ? "🟡" : "🟢"}
+                    </span>
+                    <span className="font-semibold text-sm uppercase tracking-wide text-slate-800">
+                      {riskAssessment.level === "high_risk" ? "High Risk" : riskAssessment.level === "caution" ? "Caution" : "Clear"}
+                    </span>
+                    <span className="ml-auto text-xs text-gray-400">Credit Intelligence</span>
+                  </div>
+
+                  {/* Key metrics row */}
+                  <div className="flex gap-4 mb-3 text-sm">
+                    <div>
+                      <span className="text-gray-500">Outstanding</span>
+                      <div className="font-medium text-slate-800">₹{riskAssessment.outstanding_balance.toLocaleString("en-IN")}</div>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Credit Used</span>
+                      <div className="font-medium text-slate-800">{riskAssessment.credit_utilisation_pct}%</div>
+                    </div>
+                    {riskAssessment.overdue_days > 0 && (
+                      <div>
+                        <span className="text-gray-500">Overdue</span>
+                        <div className="font-medium text-red-600">{riskAssessment.overdue_days} days</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Signals */}
+                  {riskAssessment.signals.length > 0 && (
+                    <ul className="text-xs text-gray-600 mb-3 space-y-1">
+                      {riskAssessment.signals.map((s: string, i: number) => (
+                        <li key={i} className="flex items-center gap-1">
+                          <span>⚠️</span> {s}
+                        </li>
+                      ))}
+                    </ul>
                   )}
-                </button>
-              ) : selectedOrder && selectedOrder.status === "Confirmed" ? (
-                <button
-                  onClick={() => {
-                    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-                    window.open(`${apiBase}/api/v1/orders/${selectedOrderId}/invoice`, "_blank");
-                  }}
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
-                >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  <span>Download B2B Invoice</span>
-                </button>
-              ) : (
-                <div></div>
+
+                  {/* Recommendation */}
+                  <div className="bg-white rounded p-2 text-xs text-gray-700 border border-gray-100">
+                    <span className="font-medium">💡 Recommendation: </span>
+                    {riskAssessment.recommendation}
+                  </div>
+                </div>
               )}
-              <button
-                onClick={handleCloseDetails}
-                className="px-5 py-2.5 bg-slate-800 text-white hover:bg-slate-700 text-sm font-bold rounded-lg transition-all cursor-pointer"
-              >
-                Close Details
-              </button>
+
+              <div className="flex items-center justify-between gap-3 w-full">
+                {selectedOrder && (selectedOrder.status === "Draft" || selectedOrder.status === "Pending" || selectedOrder.status === "Confirmed") && (
+                  <button
+                    onClick={() => setIsCancelDialogOpen(true)}
+                    className="px-4 py-2.5 bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 text-sm font-bold rounded-lg transition-all cursor-pointer"
+                  >
+                    Cancel Order
+                  </button>
+                )}
+                {selectedOrder && (selectedOrder.status === "Pending" || selectedOrder.status === "Needs Review") && (
+                  <button
+                    onClick={handleConfirmOrder}
+                    disabled={isConfirming}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
+                  >
+                    {isConfirming ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Confirming...</span>
+                      </>
+                    ) : (
+                      <span>Confirm Order</span>
+                    )}
+                  </button>
+                )}
+
+                <div className="flex gap-2 flex-wrap">
+                  {/* Download invoice — only for Confirmed */}
+                  {selectedOrder && selectedOrder.status === "Confirmed" && (
+                    <button
+                      onClick={() => {
+                        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+                        window.open(`${apiBase}/api/v1/orders/${selectedOrderId}/invoice`, "_blank");
+                      }}
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-4 h-4" />
+                      <span>Download B2B Invoice</span>
+                    </button>
+                  )}
+
+                  {/* Mark Delivered — only for Dispatched */}
+                  {selectedOrder && selectedOrder.status === "Dispatched" && (
+                    <button
+                      onClick={handleMarkDelivered}
+                      disabled={isMarkingDelivered}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      {isMarkingDelivered ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Marking Delivered...</span>
+                        </>
+                      ) : (
+                        <span>Mark as Delivered</span>
+                      )}
+                    </button>
+                  )}
+
+                  {/* Copy Payment Link — for any unpaid post-confirmation order */}
+                  {selectedOrder &&
+                   ["Confirmed", "Dispatched", "Delivered"].includes(selectedOrder.status) &&
+                   selectedOrder.payment_status !== "PAID" && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const invoiceId = selectedOrderPayments?.invoice_id;
+                          if (!invoiceId) {
+                            showToast("No invoice found for this order.", "error");
+                            return;
+                          }
+
+                          const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+                          const res = await fetch(
+                            `${apiBase}/api/v1/payments/payment-options?invoice_id=${invoiceId}&tenant_id=${activeTenantId}`
+                          );
+                          if (!res.ok) {
+                            showToast("Failed to fetch payment options.", "error");
+                            return;
+                          }
+                          const data = await res.json();
+                          const link = data?.payment_links?.pay_invoice;
+
+                          if (link) {
+                            await navigator.clipboard.writeText(link);
+                            showToast("Payment link copied to clipboard!", "success");
+                          } else {
+                            showToast("Payment link not available yet.", "error");
+                          }
+                        } catch (err) {
+                          console.error("Failed to copy link:", err);
+                          showToast("Failed to fetch payment link.", "error");
+                        }
+                      }}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      <span>🔗</span>
+                      <span>Copy Payment Link</span>
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={handleCloseDetails}
+                  className="px-5 py-2.5 bg-slate-800 text-white hover:bg-slate-700 text-sm font-bold rounded-lg transition-all cursor-pointer"
+                >
+                  Close Details
+                </button>
+              </div>
             </div>
           </div>
         </div>

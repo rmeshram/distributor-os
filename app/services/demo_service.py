@@ -22,7 +22,7 @@ def ensure_demo_data(db: Session, tenant_id: uuid.UUID | None = None):
     Only runs for the well-known demo tenant ID — all other tenants are ignored.
     """
     # Hard multi-tenant lockout constraint
-    if str(tenant_id) != "d3b07384-d113-4956-a5d2-64be7357c11d":
+    if tenant_id != DEMO_TENANT_ID and str(tenant_id) != str(DEMO_TENANT_ID):
         return  # Abort immediately. NEVER seed default rows into custom distributor profiles.
 
     try:
@@ -144,7 +144,8 @@ def _seed_demo_data(db: Session):
             internal_order_id=o["ord_id"],
             source=o["source"],
             customer_id=uuid.UUID(o["cust_id"]) if isinstance(o["cust_id"], str) else o["cust_id"],
-            created_at=datetime.utcnow() - timedelta(minutes=o["time_offset"])
+            created_at=datetime.utcnow() - timedelta(minutes=o["time_offset"]),
+            status=o["status"]
         )
         db.add(order)
         db.flush()

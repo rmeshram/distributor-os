@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from app.database import get_db, tenant_context
 from app.models.product import Product, ProductAlias
 from app.models.inventory import Inventory
-from app.api.v1.dashboard import ensure_demo_data
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -141,7 +140,6 @@ def get_products(
     """
     Returns paginated product catalog with optional search and sorting.
     """
-    ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
     query = db.query(Product).filter(
@@ -261,7 +259,6 @@ def get_inventory_items(
     """
     Retrieves inventory levels for all products under the tenant.
     """
-    ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
     items = db.query(Product, Inventory).outerjoin(Inventory, Product.id == Inventory.sku_id).filter(
         Product.tenant_id == tenant_id,

@@ -139,7 +139,7 @@ def firebase_login(
         logger.warning(f"Firebase token rejected (malformed/empty): {ve}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or malformed Firebase token."
+            detail="Firebase token is invalid or has expired. Please request a new OTP."
         )
     except Exception as e:
         logger.error(f"Unexpected Auth Error: {traceback.format_exc()}")

@@ -12,13 +12,18 @@ import {
   EyeOff,
   Link2,
   Loader2,
-  Lock
+  Lock,
+  XCircle
 } from "lucide-react";
 
 export default function IntegrationsPage() {
   const [activeTenantId, setActiveTenantId] = useState("");
   const [whatsappPhoneId, setWhatsappPhoneId] = useState("");
   const [whatsappAccessToken, setWhatsappAccessToken] = useState("");
+  const [whatsappOrderPhone, setWhatsappOrderPhone] = useState("");
+  const [ownerJid, setOwnerJid] = useState("");
+  const [showDisconnectModal, setShowDisconnectModal] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   
   // Masked visibility states
   const [showPhoneId, setShowPhoneId] = useState(false);
@@ -33,14 +38,7 @@ export default function IntegrationsPage() {
   const [qrCodeBase64, setQrCodeBase64] = useState("");
   const [evolutionError, setEvolutionError] = useState("");
 
-  // Pre-fill instanceName with slugified tenant ID
-  useEffect(() => {
-    if (activeTenantId) {
-      setInstanceName(`inst-${activeTenantId.substring(0, 8)}`);
-    } else {
-      setInstanceName("default-bot");
-    }
-  }, [activeTenantId]);
+
 
   // Connection status polling
   useEffect(() => {
@@ -55,6 +53,9 @@ export default function IntegrationsPage() {
           const data = await resp.json();
           if (data.status === "open") {
             setProvisioningStatus("connected");
+            if (data.ownerJid) {
+              setOwnerJid(data.ownerJid);
+            }
             showToast("WhatsApp Instance successfully connected!", "success");
           }
         }
@@ -69,10 +70,6 @@ export default function IntegrationsPage() {
 
   const handleProvisionEvolution = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!instanceName.trim()) {
-      showToast("Instance Name is required.", "error");
-      return;
-    }
 
     setProvisioningStatus("provisioning");
     setEvolutionError("");
@@ -83,12 +80,15 @@ export default function IntegrationsPage() {
       const resp = await fetch(`${apiBase}/api/v1/evolution/provision`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instance_name: instanceName.trim() })
+        body: JSON.stringify({})
       });
 
       const data = await resp.json();
 
       if (resp.ok && data.status === "success") {
+        if (data.instance_name) {
+          setInstanceName(data.instance_name);
+        }
         if (data.connection_status === "open") {
           setProvisioningStatus("connected");
           showToast("WhatsApp Instance is already open and connected!", "success");
@@ -151,6 +151,32 @@ export default function IntegrationsPage() {
           const data = await resp.json();
           setWhatsappPhoneId(data.whatsapp_phone_id || "");
           setWhatsappAccessToken(data.whatsapp_access_token || "");
+          setWhatsappOrderPhone(data.whatsapp_order_phone || "");
+          if (data.whatsapp_phone_id) {
+            setInstanceName(data.whatsapp_phone_id);
+            // Verify connection status
+            try {
+              const statusResp = await fetch(`${apiBase}/api/v1/evolution/status?instance_name=${data.whatsapp_phone_id}`);
+              if (statusResp.ok) {
+                const statusData = await statusResp.json();
+                if (statusData.status === "open") {
+                  setProvisioningStatus("connected");
+                  if (statusData.ownerJid) {
+                    setOwnerJid(statusData.ownerJid);
+                  }
+                } else {
+                  setProvisioningStatus("idle");
+                }
+              } else {
+                setProvisioningStatus("idle");
+              }
+            } catch (err) {
+              console.error("Error fetching connection status on mount:", err);
+              setProvisioningStatus("idle");
+            }
+          } else {
+            setProvisioningStatus("idle");
+          }
         } else {
           showToast("Failed to fetch WhatsApp integration details.", "error");
         }
@@ -220,7 +246,38 @@ export default function IntegrationsPage() {
     }
   };
 
+  const handleDisconnect = async () => {
+    setDisconnecting(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetch(`${apiBase}/api/v1/evolution/disconnect?instance_name=${instanceName}`, {
+        method: "DELETE",
+        credentials: "include"
+      });
+
+      if (resp.ok) {
+        showToast("WhatsApp disconnected successfully.", "success");
+        setProvisioningStatus("idle");
+        setInstanceName("");
+        setOwnerJid("");
+        setWhatsappOrderPhone("");
+        setWhatsappPhoneId("");
+        setQrCodeBase64("");
+      } else {
+        const data = await resp.json();
+        showToast(data.detail || "Failed to disconnect WhatsApp.", "error");
+      }
+    } catch (err) {
+      console.error("Disconnect failed:", err);
+      showToast("Network error during disconnect request.", "error");
+    } finally {
+      setDisconnecting(false);
+      setShowDisconnectModal(false);
+    }
+  };
+
   const isConnected = whatsappPhoneId && whatsappAccessToken;
+  const displayPhone = ownerJid ? ownerJid.replace("@s.whatsapp.net", "") : whatsappOrderPhone;
 
   return (
     <div className="flex h-screen bg-[#F8FAFC]">
@@ -399,8 +456,8 @@ export default function IntegrationsPage() {
                         <span>Provisioning...</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 bg-slate-50 text-slate-500 border border-slate-200 px-3 py-1 rounded-full text-xs font-bold">
-                        <Lock className="w-4 h-4 text-slate-400" />
+                      <span className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-700 border border-rose-200 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                        <XCircle className="w-4 h-4 text-rose-600" />
                         <span>Not Connected</span>
                       </span>
                     )}
@@ -408,83 +465,137 @@ export default function IntegrationsPage() {
                 </div>
 
                 <div className="p-6 space-y-6">
-                  <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 text-xs leading-relaxed font-semibold">
-                    <AlertCircle className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
-                    <div>
-                      <span className="text-slate-800 font-bold">Evolution API Provisioning Instructions:</span>
-                      <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 font-medium">
-                        <li>Enter a unique identifier name for your WhatsApp instance (default is prefilled based on your workspace).</li>
-                        <li>Click "Provision WhatsApp Instance" to initialize the connection.</li>
-                        <li>If required, scan the generated QR code using Link a Device option in your WhatsApp application.</li>
-                        <li>The system will automatically detect the connection and activate the ingestion pipeline.</li>
-                      </ul>
-                    </div>
-                  </div>
-
-                  <form onSubmit={handleProvisionEvolution} className="space-y-5">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">
-                        WhatsApp Instance Name *
-                      </label>
-                      <div className="relative rounded-lg shadow-sm">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Smartphone className="h-4 w-4 text-slate-400" />
+                  {provisioningStatus === "connected" ? (
+                    <div className="space-y-4">
+                      <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex flex-col gap-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Connected Phone Number</span>
+                          <span className="text-sm font-bold text-slate-800">
+                            +{displayPhone.replace("+", "")}
+                          </span>
                         </div>
-                        <input
-                          type="text"
-                          value={instanceName}
-                          onChange={(e) => setInstanceName(e.target.value)}
-                          required
-                          disabled={provisioningStatus === "provisioning" || provisioningStatus === "connecting"}
-                          placeholder="e.g. inst-workspace"
-                          className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold"
-                        />
+                        <div className="flex justify-between items-center border-t border-slate-200/60 pt-2 mt-1">
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Instance ID</span>
+                          <span className="text-xs font-semibold text-slate-500 font-mono">
+                            {instanceName}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end pt-2 border-t border-slate-100 mt-6">
+                        <button
+                          type="button"
+                          onClick={() => setShowDisconnectModal(true)}
+                          className="px-6 py-2.5 bg-rose-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-rose-700 cursor-pointer transition-all animate-in fade-in duration-200"
+                        >
+                          Disconnect
+                        </button>
                       </div>
                     </div>
-
-                    {qrCodeBase64 && (provisioningStatus === "connecting" || provisioningStatus === "provisioning") && (
-                      <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl space-y-4">
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Scan this QR code with WhatsApp</p>
-                        <div className="bg-white p-4 rounded-xl shadow-md border border-slate-100">
-                          <img src={qrCodeBase64} alt="WhatsApp QR Code" className="w-48 h-48" />
+                  ) : (
+                    <>
+                      <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 text-xs leading-relaxed font-semibold">
+                        <AlertCircle className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
+                        <div>
+                          <span className="text-slate-800 font-bold">Evolution API Connection Instructions:</span>
+                          <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 font-medium">
+                            <li>Click "Connect WhatsApp" to initialize the connection.</li>
+                            <li>The system will auto-generate a unique instance ID for your workspace.</li>
+                            <li>Scan the generated QR code using the "Link a Device" option in your WhatsApp app.</li>
+                            <li>The system will automatically detect the connection and activate the ingestion pipeline.</li>
+                          </ul>
                         </div>
-                        <p className="text-[10px] text-slate-400 font-semibold animate-pulse flex items-center gap-1.5">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Waiting for scan authorization...</span>
-                        </p>
                       </div>
-                    )}
 
-                    {evolutionError && (
-                      <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                        <span>{evolutionError}</span>
-                      </div>
-                    )}
-
-                    <div className="flex justify-end pt-2 border-t border-slate-100 mt-6">
-                      <button
-                        type="submit"
-                        disabled={provisioningStatus === "provisioning" || provisioningStatus === "connecting"}
-                        className="px-6 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-emerald-700 disabled:opacity-55 flex items-center gap-2 cursor-pointer transition-all"
-                      >
-                        {provisioningStatus === "provisioning" ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Initializing Instance...</span>
-                          </>
-                        ) : (
-                          <span>Provision WhatsApp Instance</span>
+                      <form onSubmit={handleProvisionEvolution} className="space-y-5">
+                        {qrCodeBase64 && (provisioningStatus === "connecting" || provisioningStatus === "provisioning") && (
+                          <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl space-y-4">
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Scan this QR code with WhatsApp</p>
+                            <div className="bg-white p-4 rounded-xl shadow-md border border-slate-100">
+                              <img src={qrCodeBase64} alt="WhatsApp QR Code" className="w-48 h-48" />
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-semibold animate-pulse flex items-center gap-1.5">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Waiting for scan authorization...</span>
+                            </p>
+                          </div>
                         )}
-                      </button>
-                    </div>
-                  </form>
+
+                        {evolutionError && (
+                          <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                            <span>{evolutionError}</span>
+                          </div>
+                        )}
+
+                        <div className="flex justify-end pt-2 border-t border-slate-100 mt-6">
+                          <button
+                            type="submit"
+                            disabled={provisioningStatus === "provisioning" || provisioningStatus === "connecting"}
+                            className="px-6 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-emerald-700 disabled:opacity-55 flex items-center gap-2 cursor-pointer transition-all"
+                          >
+                            {provisioningStatus === "provisioning" ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span>Connecting...</span>
+                              </>
+                            ) : (
+                              <span>Connect WhatsApp</span>
+                            )}
+                          </button>
+                        </div>
+                      </form>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
           )}
         </main>
       </div>
+
+      {showDisconnectModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full border border-slate-100 p-6 space-y-6 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-rose-50 rounded-full text-rose-600">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-base font-bold text-slate-950">Disconnect WhatsApp</h3>
+                <p className="text-sm text-slate-500 font-medium leading-relaxed font-semibold">
+                  This will disconnect your WhatsApp. New orders will stop coming in. Are you sure?
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={disconnecting}
+                onClick={() => setShowDisconnectModal(false)}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg text-sm font-bold cursor-pointer transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={disconnecting}
+                onClick={handleDisconnect}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-bold shadow-md disabled:opacity-55 flex items-center gap-1.5 cursor-pointer transition-all"
+              >
+                {disconnecting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Disconnecting...</span>
+                  </>
+                ) : (
+                  <span>Yes, Disconnect</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Elegant Toast Notifications */}
       {toast.show && (

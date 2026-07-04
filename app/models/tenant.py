@@ -1,6 +1,8 @@
+import json
 import uuid
 from datetime import datetime
-from sqlalchemy import String, DateTime, Integer
+from sqlalchemy import String, DateTime, Integer, JSON
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
@@ -13,8 +15,30 @@ class DistributorTenant(Base):
     whatsapp_order_phone: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)
     whatsapp_phone_id: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
     whatsapp_access_token: Mapped[str | None] = mapped_column(String(500), nullable=True, default=None)
+    razorpay_key_id: Mapped[str | None] = mapped_column(String(100), nullable=True, default=None)
+    razorpay_key_secret_enc: Mapped[str | None] = mapped_column(String(500), nullable=True, default=None)
+    razorpay_account_name: Mapped[str | None] = mapped_column(String(200), nullable=True, default=None)
+    razorpay_mode: Mapped[str] = mapped_column(String(10), nullable=False, default="test")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     plan_type: Mapped[str] = mapped_column(String(50), nullable=False, default="FREE")
     monthly_order_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    
+    notification_prefs: Mapped[dict] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=False,
+        server_default=json.dumps({
+            # Operational
+            "order_received": True,
+            "order_confirmed": True,
+            "order_dispatched": True,
+            "order_delivered": True,
+            "new_order_alert_to_distributor": True,
+            # Financial
+            "payment_reminder": True,
+            "payment_reminder_upcoming": True,
+            "payment_reminder_overdue": True,
+            "payment_received_confirmation": True
+        })
+    )
 
 

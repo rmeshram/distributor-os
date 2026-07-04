@@ -18,7 +18,8 @@ import {
   ChevronRight,
   MessageSquare,
   Settings,
-  Link2
+  Link2,
+  Bell
 } from "lucide-react";
 
 
@@ -61,21 +62,23 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
     type?: string;
     badge?: string;
   }[] = [
-      { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
-      { name: "Messages", icon: MessageSquare, href: "/dashboard/messages" },
-      { name: "Orders", icon: ShoppingCart, href: "/dashboard/orders" },
-      { name: "Inventory", icon: Box, href: "/dashboard/inventory" },
-      { name: "Products", icon: Layers, href: "/dashboard/products" },
-      { name: "Customers", icon: Users, href: "/dashboard/customers" },
-      { name: "Shipments", icon: Truck, href: "/dashboard/shipments" },
-      { name: "Collections", icon: CreditCard, href: "/dashboard/collections" },
-      { name: "Sales Analytics", icon: BarChart3, href: "/dashboard/sales-analytics" },
-      { name: "Reports", icon: FileText, href: "/dashboard/reports" },
-      { type: "category", name: "Settings" },
-      { name: "Team Settings", icon: Settings, href: "/dashboard/settings/team" },
-      { name: "Integrations", icon: Link2, href: "/dashboard/settings/integrations" },
-      { name: "Automations", icon: Zap, href: "/dashboard/settings/integrations", badge: "Soon" }
-    ];
+    { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+    { name: "Messages", icon: MessageSquare, href: "/dashboard/messages" },
+    { name: "Orders", icon: ShoppingCart, href: "/dashboard/orders" },
+    { name: "Inventory", icon: Box, href: "/dashboard/inventory" },
+    { name: "Products", icon: Layers, href: "/dashboard/products" },
+    { name: "Customers", icon: Users, href: "/dashboard/customers" },
+    { name: "Shipments", icon: Truck, href: "/dashboard/shipments" },
+    { name: "Collections", icon: CreditCard, href: "/dashboard/collections" },
+    { name: "Sales Analytics", icon: BarChart3, href: "/dashboard/sales-analytics" },
+    { name: "Reports", icon: FileText, href: "/dashboard/reports" },
+    { type: "category", name: "Settings" },
+    { name: "Team Settings", icon: Settings, href: "/dashboard/settings/team" },
+    { name: "Integrations", icon: Link2, href: "/dashboard/settings/integrations" },
+    { name: "Notifications", icon: Bell, href: "/dashboard/settings/notifications" },
+    { name: "Payments", icon: CreditCard, href: "/dashboard/settings/payments" },
+    { name: "Automations", icon: Zap, badge: "Soon" }
+  ];
 
 
 

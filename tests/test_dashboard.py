@@ -14,7 +14,7 @@ from app.database import tenant_context
 def fixture_client():
     return TestClient(app)
 
-def test_dashboard_api_endpoints(db_session, client):
+def test_dashboard_api_endpoints(db_session, client, seed_demo_data):
     # The default tenant ID used by the seeder is:
     demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
 
@@ -71,7 +71,7 @@ def test_dashboard_api_endpoints(db_session, client):
     assert "ORD-2505-1482" in activity[0]["message"]
 
 
-def test_customer_whatsapp_thread(db_session, client):
+def test_customer_whatsapp_thread(db_session, client, seed_demo_data):
     demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
     kaveri_id = "c1010000-0000-0000-0000-000000000001"   # has a WhatsApp order
     maruthi_id = "c1010000-0000-0000-0000-000000000002"  # only a Portal order
@@ -106,7 +106,7 @@ def test_customer_whatsapp_thread(db_session, client):
     assert empty["total"] == 0.0
 
 
-def test_dashboard_metrics_date_filtering(db_session, client):
+def test_dashboard_metrics_date_filtering(db_session, client, seed_demo_data):
     demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
     
     # 1. Call metrics with dates that filter orders
@@ -140,5 +140,32 @@ def test_dashboard_tenant_validation_guardrails(client):
     resp = client.get("/api/v1/dashboard/metrics?tenant_id=")
     assert resp.status_code == 401
     assert "Session expired or token missing" in resp.json()["detail"]
+
+
+def test_dashboard_overview_endpoint(db_session, client, seed_demo_data):
+    demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+
+    # Call overview endpoint
+    resp = client.get(f"/api/v1/dashboard/overview?tenant_id={demo_tenant_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert "metrics" in data
+    assert "recent_orders" in data
+    assert "donut_data" in data
+
+    metrics = data["metrics"]
+    assert metrics["total_sales"] == 252970.0
+    assert metrics["orders_count"] == 5
+    assert metrics["average_order_value"] == 50594.0
+
+    recent_orders = data["recent_orders"]
+    assert len(recent_orders) == 5
+    assert recent_orders[0]["order_id"] == "ORD-2505-1482"
+    assert recent_orders[0]["status"] == "Confirmed"
+
+    donut = data["donut_data"]
+    assert len(donut) == 4
+    assert next(item for item in donut if item["name"] == "0-15 Days")["percentage"] == 39
 
 

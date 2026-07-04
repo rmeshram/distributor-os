@@ -1,8 +1,7 @@
 import uuid
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
-from app.database import tenant_context
+from app.database import tenant_context, with_db_retry
 from app.models.payment import Payment, PaymentInvoiceLink
 from app.models.customer import Customer
 from app.models.ledger import CustomerLedger
@@ -57,6 +56,7 @@ def allocate_payment_fifo(db: Session, customer_id: uuid.UUID, payment_id: uuid.
         )
         db.add(link)
 
+@with_db_retry
 def reconcile_payments_and_invoices(db: Session, tenant_id: uuid.UUID, customer_id: uuid.UUID | None = None):
     """
     Event-driven centralized payment status reconciler.
@@ -80,11 +80,11 @@ def reconcile_payments_and_invoices(db: Session, tenant_id: uuid.UUID, customer_
             if not invoice:
                 customer = db.get(Customer, order.customer_id)
                 amount_sum = sum(float(item.quantity * item.unit_price) for item in order.line_items)
-
+                
                 invoice = Invoice(
                     tenant_id=tenant_id,
                     order_id=order.id,
-                    gstin=customer.gstin if (customer and customer.gstin and customer.gstin not in ("PENDING", "")) else "UNREGISTERED",
+                    gstin=customer.gstin if (customer and customer.gstin) else "29AAAAA1111A1Z1",
                     total_amount=amount_sum,
                     irn_status="Cleared",
                     qr_code_status="Generated",
@@ -93,12 +93,11 @@ def reconcile_payments_and_invoices(db: Session, tenant_id: uuid.UUID, customer_
                     amount_paid=0.0,
                     created_at=order.created_at
                 )
-                try:
-                    db.add(invoice)
-                    db.flush()
-                    invoices_created = True
-                except IntegrityError:
-                    db.rollback()  # Another concurrent request created it — skip silently
+                db.add(invoice)
+                invoices_created = True
+                
+    if invoices_created:
+        db.flush()
 
     # 2. Find completed payments and allocate unallocated balances via FIFO
     payment_query = db.query(Payment).filter(
@@ -134,32 +133,22 @@ def reconcile_payments_and_invoices(db: Session, tenant_id: uuid.UUID, customer_
         order = db.get(Order, invoice.order_id)
         if order:
             order.payment_status = invoice.payment_status
-
+            
             shipments = db.query(Shipment).filter(Shipment.order_id == order.id).all()
             for shipment in shipments:
                 shipment.payment_status = invoice.payment_status
 
-    # Recompute customer outstanding_balance from invoices to prevent drift.
-    # Flush first so the SQL aggregate sees the in-memory FIFO allocation changes.
-    db.flush()
-    if customer_id:
-        unpaid_total = db.query(func.sum(Invoice.total_amount - Invoice.amount_paid)).filter(
-            Invoice.customer_id == customer_id,
-            Invoice.tenant_id == tenant_id,
-            Invoice.payment_status.notin_(["PAID"])
-        ).scalar() or 0.0
-        _cust = db.get(Customer, customer_id)
-        if _cust:
-            _cust.outstanding_balance = max(0.0, float(unpaid_total))
-    # NOTE: callers own db.commit() — do NOT commit here.
+    db.commit()
 
+@with_db_retry
 def process_payment(
     db: Session,
     tenant_id: uuid.UUID,
     customer_id: uuid.UUID,
     amount: float,
     method: str,
-    reference_number: str | None = None
+    reference_number: str | None = None,
+    preferred_invoice_id: uuid.UUID | None = None  # NEW
 ) -> Payment:
     """
     Core handler to process a customer payment, update their outstanding balance,
@@ -196,11 +185,43 @@ def process_payment(
         )
         db.add(ledger_entry)
 
+        # 3. Decrement Customer Outstanding Balance
+        customer.outstanding_balance = float(customer.outstanding_balance) - amount
+        
         db.flush()
 
-        # Centralized Reconciler handles FIFO allocation, status propagation,
-        # and recomputes customer.outstanding_balance from invoice source of truth.
-        reconcile_payments_and_invoices(db, tenant_id, customer_id)
+        # ── PREFERRED INVOICE ALLOCATION ──
+        amount_remaining = amount
+
+        # If a preferred invoice is specified, pay it first
+        if preferred_invoice_id:
+            preferred_invoice = db.get(Invoice, preferred_invoice_id)
+            if preferred_invoice and preferred_invoice.payment_status not in ("PAID",):
+                invoice_total = float(preferred_invoice.total_amount)
+                invoice_paid = float(preferred_invoice.amount_paid or 0)
+                amount_due = invoice_total - invoice_paid
+                if amount_due > 0:
+                    allocated = min(amount_remaining, amount_due)
+                    preferred_invoice.amount_paid = invoice_paid + allocated
+                    preferred_invoice.payment_status = "PAID" if preferred_invoice.amount_paid >= invoice_total else "PARTIALLY_PAID"
+                    amount_remaining -= allocated
+                    db.add(PaymentInvoiceLink(
+                        id=uuid.uuid4(),
+                        tenant_id=tenant_id,
+                        payment_id=payment.id,
+                        invoice_id=preferred_invoice.id,
+                        amount_allocated=allocated
+                    ))
+
+        # Apply remainder (or full amount if no preferred invoice) via FIFO
+        if amount_remaining > 0:
+            allocate_payment_fifo(
+                db=db,
+                customer_id=customer_id,
+                payment_id=payment.id,
+                total_amount=amount_remaining,
+                tenant_id=tenant_id
+            )
 
         db.commit()
         db.refresh(payment)
