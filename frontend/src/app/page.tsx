@@ -6,8 +6,6 @@ import Link from "next/link";
 export default function MarketingPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalSubmitted, setModalSubmitted] = useState(false);
   const [visible, setVisible] = useState<Record<string, boolean>>({});
   const [faqOpenIdx, setFaqOpenIdx] = useState<number | null>(null);
   const [demoTyped, setDemoTyped] = useState('');
@@ -109,13 +107,6 @@ export default function MarketingPage() {
   }, []);
 
   const toggleNav = () => setNavOpen(prev => !prev);
-  const openModal = () => {
-    setModalOpen(true);
-    setModalSubmitted(false);
-  };
-  const closeModal = () => setModalOpen(false);
-  const stopClick = (e: React.MouseEvent) => { if (e && e.stopPropagation) e.stopPropagation(); };
-  const submitModal = () => setModalSubmitted(true);
 
   const cardStyle = (visibleState: boolean, index: number) => {
     return {
@@ -201,7 +192,6 @@ export default function MarketingPage() {
 
   const navToggleIcon = navOpen ? '✕' : '☰';
   const demoShowOrderNot = !demoShowOrder;
-  const modalNotSubmitted = !modalSubmitted;
   const isMobileNav = isMobile;
   const isMobileNotNav = !isMobile;
   const demoOrderStyle = {
@@ -222,7 +212,7 @@ export default function MarketingPage() {
       </div>
       {isMobileNav && (<React.Fragment>
         <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
-          <div onClick={openModal} style={{background: '#10b981', color: '#ffffff', fontWeight: 700, fontSize: 13, padding: '9px 14px', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap'}}>Start Trial</div>
+          <Link href="/auth" style={{background: '#10b981', color: '#ffffff', fontWeight: 700, fontSize: 13, padding: '9px 14px', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'none'}}>Start Trial</Link>
           <div onClick={toggleNav} style={{width: 38, height: 38, borderRadius: 8, background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#ffffff', fontSize: 18}}>{ navToggleIcon }</div>
         </div>
       </React.Fragment>)}
@@ -234,7 +224,7 @@ export default function MarketingPage() {
           <a href="#pricing" style={{color: '#cbd5e1', textDecoration: 'none', fontSize: 14, fontWeight: 500}}>Pricing</a>
           <a href="#faq" style={{color: '#cbd5e1', textDecoration: 'none', fontSize: 14, fontWeight: 500}}>FAQ</a>
         </div>
-        <div onClick={openModal} style={{background: '#10b981', color: '#ffffff', fontWeight: 700, fontSize: 14, padding: '11px 20px', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap'}}>Start Free Trial</div>
+        <Link href="/auth" style={{background: '#10b981', color: '#ffffff', fontWeight: 700, fontSize: 14, padding: '11px 20px', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'none'}}>Start Free Trial</Link>
       </React.Fragment>)}
     </div>
     {navOpen && (<React.Fragment>
@@ -268,7 +258,7 @@ export default function MarketingPage() {
           Your retailers message you on WhatsApp. DistributorOS reads it, creates the order, updates inventory, and sends them a payment link. You do nothing.
         </div>
         <div style={{display: 'flex', flexWrap: 'wrap', gap: 14}}>
-          <div onClick={openModal} style={{background: '#10b981', color: '#ffffff', fontWeight: 700, fontSize: 16, padding: '16px 28px', borderRadius: 10, cursor: 'pointer', boxShadow: '0 8px 24px rgba(16,185,129,0.35)'}}>Start Free Trial →</div>
+          <Link href="/auth" style={{background: '#10b981', color: '#ffffff', fontWeight: 700, fontSize: 16, padding: '16px 28px', borderRadius: 10, cursor: 'pointer', boxShadow: '0 8px 24px rgba(16,185,129,0.35)', textDecoration: 'none'}}>Start Free Trial →</Link>
           <a href="#how" style={{textDecoration: 'none', border: '1.5px solid rgba(255,255,255,0.25)', color: '#ffffff', fontWeight: 700, fontSize: 16, padding: '16px 28px', borderRadius: 10, textAlign: 'center'}}>See How It Works</a>
         </div>
         <div style={{marginTop: 28, color: '#64748b', fontSize: 13}}>No credit card needed · 15-day free trial · Setup in 10 minutes</div>
@@ -464,7 +454,7 @@ export default function MarketingPage() {
                 </div>
               </React.Fragment>))}
             </div>
-            <div onClick={openModal} style={{background: item.btnBg, color: item.btnColor, fontWeight: 700, fontSize: 15, padding: 14, borderRadius: 10, cursor: 'pointer', textAlign: 'center'}}>{ item.cta }</div>
+            <Link href="/auth" style={{background: item.btnBg, color: item.btnColor, fontWeight: 700, fontSize: 15, padding: 14, borderRadius: 10, cursor: 'pointer', textAlign: 'center', textDecoration: 'none', display: 'block'}}>{ item.cta }</Link>
           </div>
         </React.Fragment>))}
       </div>
@@ -511,14 +501,7 @@ export default function MarketingPage() {
             <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
               <a href="#" style={{color: '#94a3b8', textDecoration: 'none', fontSize: 14}}>Privacy</a>
               <a href="#" style={{color: '#94a3b8', textDecoration: 'none', fontSize: 14}}>Terms</a>
-              <div onClick={openModal} style={{color: '#94a3b8', fontSize: 14, cursor: 'pointer'}}>Contact</div>
-            </div>
-          </div>
-          <div>
-            <div style={{color: '#ffffff', fontSize: 13, fontWeight: 700, marginBottom: 14}}>Get in touch</div>
-            <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
-              <div style={{color: '#94a3b8', fontSize: 14}}>📞 +91 91991 53059</div>
-              <div style={{color: '#94a3b8', fontSize: 14}}>✉️ shubhammeshram44@gmail.com</div>
+              <Link href="/auth" style={{color: '#94a3b8', fontSize: 14, cursor: 'pointer', textDecoration: 'none'}}>Contact</Link>
             </div>
           </div>
         </div>
@@ -527,34 +510,7 @@ export default function MarketingPage() {
     </div>
   </div>
 
-  {/* MODAL */}
-  {modalOpen && (<React.Fragment>
-    <div onClick={closeModal} style={{position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20}}>
-      <div onClick={stopClick} style={{background: '#ffffff', borderRadius: 18, padding: 34, maxWidth: 420, width: '100%', position: 'relative'}}>
-        <div onClick={closeModal} style={{position: 'absolute', top: 18, right: 18, width: 30, height: 30, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b', fontSize: 15}}>✕</div>
-        {modalSubmitted && (<React.Fragment>
-          <div style={{textAlign: 'center', padding: '20px 0'}}>
-            <div style={{fontSize: 40, marginBottom: 16}}>✅</div>
-            <div style={{fontSize: 19, fontWeight: 800, color: '#0f172a', marginBottom: 8}}>Thanks! We'll WhatsApp you shortly.</div>
-            <div style={{fontSize: 14, color: '#64748b'}}>Or call us right away at 📞 91991 53059</div>
-          </div>
-        </React.Fragment>)}
-        {modalNotSubmitted && (<React.Fragment>
-          <div>
-            <div style={{fontSize: 21, fontWeight: 800, color: '#0f172a', marginBottom: 6}}>Start your free trial</div>
-            <div style={{fontSize: 14, color: '#64748b', marginBottom: 22}}>15 days free, all features. No credit card needed.</div>
-            <div style={{display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 18}}>
-              <input  placeholder="Your name" style={{padding: '13px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, fontFamily: 'inherit'}} />
-              <input  placeholder="WhatsApp number" style={{padding: '13px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, fontFamily: 'inherit'}} />
-              <input  placeholder="Business name" style={{padding: '13px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, fontFamily: 'inherit'}} />
-            </div>
-            <div onClick={submitModal} style={{background: '#10b981', color: '#ffffff', fontWeight: 700, fontSize: 15, padding: 14, borderRadius: 10, cursor: 'pointer', textAlign: 'center', marginBottom: 14}}>Start Free Trial →</div>
-            <div style={{textAlign: 'center', color: '#94a3b8', fontSize: 13}}>or call 📞 91991 53059 · shubhammeshram44@gmail.com</div>
-          </div>
-        </React.Fragment>)}
-      </div>
-    </div>
-  </React.Fragment>)}
+
 
 </div>
   );
