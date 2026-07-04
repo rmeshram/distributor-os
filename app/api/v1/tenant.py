@@ -63,7 +63,7 @@ def update_tenant_profile(
     tenant = db.get(DistributorTenant, resolved_tenant_id)
     if not tenant:
         raise HTTPException(
-            status_code=status.HTTP_440_NOT_FOUND,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Tenant not found."
         )
         
@@ -129,7 +129,7 @@ def update_whatsapp_integration(
     tenant = db.get(DistributorTenant, resolved_tenant_id)
     if not tenant:
         raise HTTPException(
-            status_code=status.HTTP_440_NOT_FOUND,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Tenant not found."
         )
         
