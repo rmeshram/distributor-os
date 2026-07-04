@@ -130,7 +130,7 @@ export default function MarketingPage() {
       { icon: '💬', title: 'Orders lost in WhatsApp chats', desc: 'Retailer messages get buried in busy chat threads and missed entirely.' },
       { icon: '🧾', title: 'Manual billing wastes hours', desc: 'Creating invoices by hand, every single day, for every single order.' },
       { icon: '📞', title: 'Chasing payments is exhausting', desc: "Calling retailers again and again just to collect what you're owed." },
-    ].map((p, i) => ({ ...p, style: { background: '#f8fafc', border: '1px solid #eef2f7', borderRadius: '16px', padding: '32px 26px', ...cardStyle(visible.problem, i) } }));
+    ].map((p, i) => ({ ...p, style: { background: '#f8fafc', border: '1px solid #eef2f7', borderRadius: '16px', padding: '32px 26px', ...cardStyle(visible.problem, i) } as React.CSSProperties }));
   }, [visible.problem]);
 
   const steps = useMemo(() => {
@@ -138,7 +138,7 @@ export default function MarketingPage() {
       { num: '1', title: 'Retailer sends a WhatsApp message', desc: '"bhaiya 50 units rin soap bhejo" — our AI reads it instantly, in Hindi, English or both.' },
       { num: '2', title: 'Order is created automatically', desc: 'Invoice generated, inventory updated — no typing, no spreadsheets.' },
       { num: '3', title: 'Payment link sent, auto-reconciled', desc: 'Retailer pays on WhatsApp. Payment is matched to the order the moment it lands.' },
-    ].map((s, i) => ({ ...s, style: { position: 'relative', padding: '30px 26px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', ...cardStyle(visible.how, i) } }));
+    ].map((s, i) => ({ ...s, style: { position: 'relative', padding: '30px 26px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', ...cardStyle(visible.how, i) } as React.CSSProperties }));
   }, [visible.how]);
 
   const features = useMemo(() => {
@@ -149,7 +149,7 @@ export default function MarketingPage() {
       { icon: '💳', title: 'Payment Collection', desc: 'Razorpay links sent automatically, every payment tracked.' },
       { icon: '🚚', title: 'Delivery Management', desc: 'Assign to a driver, track dispatch, notify the retailer.' },
       { icon: '⏰', title: 'Payment Reminders', desc: 'Automatic WhatsApp reminders for overdue payments.' },
-    ].map((f, i) => ({ ...f, style: { display: 'flex', gap: '18px', padding: '24px', borderRadius: '14px', border: '1px solid #eef2f7', ...cardStyle(visible.features, i) } }));
+    ].map((f, i) => ({ ...f, style: { display: 'flex', gap: '18px', padding: '24px', borderRadius: '14px', border: '1px solid #eef2f7', ...cardStyle(visible.features, i) } as React.CSSProperties }));
   }, [visible.features]);
 
   const testimonials = useMemo(() => {
@@ -157,7 +157,7 @@ export default function MarketingPage() {
       { name: 'Rajesh Gupta', city: 'Kanpur, UP', initial: 'R', quote: 'Ab main WhatsApp pe order aate hi dekh leta hoon — billing khud ho jaati hai.' },
       { name: 'Sunil Deshmukh', city: 'Nashik, MH', initial: 'S', quote: 'Payment ke liye phone karna band ho gaya. Reminder khud chala jaata hai.' },
       { name: 'Anita Reddy', city: 'Vijayawada, AP', initial: 'A', quote: 'Stock ka pata hamesha rehta hai. Galti se order confirm nahi hota.' },
-    ].map((t, i) => ({ ...t, style: { background: '#ffffff', border: '1px solid #eef2f7', borderRadius: '16px', padding: '28px', ...cardStyle(visible.proof, i) } }));
+    ].map((t, i) => ({ ...t, style: { background: '#ffffff', border: '1px solid #eef2f7', borderRadius: '16px', padding: '28px', ...cardStyle(visible.proof, i) } as React.CSSProperties }));
   }, [visible.proof]);
 
   const pricingPlans = useMemo(() => {
@@ -178,7 +178,7 @@ export default function MarketingPage() {
         padding: '32px 28px', transform: p.highlight ? 'scale(1.03)' : 'scale(1)',
         boxShadow: p.highlight ? '0 24px 50px rgba(15,23,42,0.25)' : '0 1px 2px rgba(0,0,0,0.02)',
         transition: 'transform 0.25s ease, box-shadow 0.25s ease',
-      },
+      } as React.CSSProperties,
     }));
   }, []);
 
@@ -207,7 +207,7 @@ export default function MarketingPage() {
   const demoOrderStyle = {
     background: '#ffffff', borderRadius: '16px', padding: '20px', boxShadow: '0 20px 45px rgba(0,0,0,0.35)',
     animation: 'heroBubbleIn 0.5s ease',
-  };
+  } as React.CSSProperties;
 
   return (
 
