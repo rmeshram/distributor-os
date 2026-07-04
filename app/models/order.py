@@ -51,6 +51,8 @@ class Order(Base, TenantMixin):
 
     @payment_status.setter
     def payment_status(self, value: str):
+        # payment_status is a read-only computed property derived from the Invoice;
+        # the setter exists to allow payment_service sync writes without AttributeError.
         pass
 
     line_items: Mapped[list["OrderLineItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")

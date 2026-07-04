@@ -182,7 +182,7 @@ export function useDashboardData(
     }
   }, [activeTenantId, startDate, endDate, isAuthenticated, firebaseAuthExpiredFlag, fetchStaticData, fetchPolledData]);
 
-  // Activity feed polling setup (every 5 seconds) with abort to prevent stale response pile-up
+  // Activity feed polling setup (every 30 seconds) with tab-visibility pause and abort to prevent stale response pile-up
   useEffect(() => {
     if (!activeTenantId || !isAuthenticated || firebaseAuthExpiredFlag) return;
 
@@ -190,6 +190,8 @@ export function useDashboardData(
 
     const poll = async () => {
       if (controller.signal.aborted) return;
+      // Skip poll when tab is hidden to reduce server load
+      if (document.visibilityState === "hidden") return;
       try {
         const activityResp = await fetch(
           `${BASE_URL}/api/v1/dashboard/recent-activity?tenant_id=${activeTenantId}`,
@@ -206,7 +208,7 @@ export function useDashboardData(
       }
     };
 
-    const interval = setInterval(poll, 5000);
+    const interval = setInterval(poll, 30000); // 30 seconds instead of 5
 
     return () => {
       clearInterval(interval);

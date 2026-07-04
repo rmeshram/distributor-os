@@ -21,6 +21,27 @@ function cleanAndNormalizePhone(input: string): string | null {
   return null;
 }
 
+function getFirebaseErrorMessage(err: unknown): string {
+  if (err instanceof Error) {
+    const code = (err as any).code as string | undefined;
+    const firebaseMessages: Record<string, string> = {
+      "auth/too-many-requests": "Too many attempts. Please wait a few minutes before trying again.",
+      "auth/invalid-phone-number": "The phone number you entered is invalid. Please check and try again.",
+      "auth/quota-exceeded": "SMS quota exceeded. Please try again later.",
+      "auth/captcha-check-failed": "reCAPTCHA verification failed. Please refresh and try again.",
+      "auth/invalid-verification-code": "The code you entered is incorrect. Please try again.",
+      "auth/code-expired": "The verification code has expired. Please request a new one.",
+      "auth/session-expired": "Your session has expired. Please request a new OTP.",
+      "auth/missing-verification-code": "Please enter the 6-digit verification code.",
+      "auth/network-request-failed": "Network error. Please check your connection and try again.",
+      "auth/user-disabled": "This account has been disabled. Please contact support.",
+    };
+    if (code && firebaseMessages[code]) return firebaseMessages[code];
+    if (err.message) return err.message;
+  }
+  return "Something went wrong. Please try again.";
+}
+
 export default function AuthPage() {
   const router = useRouter();
   const [mobileNumber, setMobileNumber] = useState("");
@@ -69,8 +90,7 @@ export default function AuthPage() {
     } catch (err: unknown) {
       recaptchaRef.current?.clear();
       recaptchaRef.current = null;
-      const message = err instanceof Error ? err.message : "Failed to send OTP. Please try again.";
-      setError(message);
+      setError(getFirebaseErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -134,7 +154,7 @@ export default function AuthPage() {
 
       setTimeout(() => router.push("/dashboard"), 1000);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to verify OTP.";
+      const message = err instanceof Error && err.message ? err.message : getFirebaseErrorMessage(err);
       setError(message);
     } finally {
       setLoading(false);

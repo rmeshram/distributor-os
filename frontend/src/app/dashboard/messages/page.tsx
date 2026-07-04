@@ -104,21 +104,21 @@ export default function MessagesPage() {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       
       // Fetch orders
-      const ordersResp = await fetch(`${apiBase}/api/v1/orders?tenant_id=${activeTenantId}`, {
+      const ordersResp = await fetch(`${apiBase}/api/v1/orders?tenant_id=${activeTenantId}&limit=200`, {
         credentials: "include"
       });
       if (ordersResp.ok) {
         const ordersData = await ordersResp.json();
-        setOrders(ordersData);
+        setOrders(ordersData.items ?? ordersData);
       }
 
       // Fetch products catalog
-      const productsResp = await fetch(`${apiBase}/api/v1/products?tenant_id=${activeTenantId}`, {
+      const productsResp = await fetch(`${apiBase}/api/v1/products?tenant_id=${activeTenantId}&limit=200`, {
         credentials: "include"
       });
       if (productsResp.ok) {
         const productsData = await productsResp.json();
-        setProductsList(productsData);
+        setProductsList(productsData.items ?? productsData);
       }
     } catch (err) {
       console.error("Failed to fetch triage data:", err);

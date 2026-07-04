@@ -18,8 +18,8 @@ from app.services.tenant_service import DEMO_TENANT_ID
 
 def ensure_demo_data(db: Session, tenant_id: uuid.UUID | None = None):
     """
-    Seeds the database with the exact B2B distributor data matching the Operations Dashboard
-    screenshot if the database is empty.
+    Seeds the database with demo data for the demo tenant if not already seeded.
+    Only runs for the well-known demo tenant ID — all other tenants are ignored.
     """
     # Hard multi-tenant lockout constraint
     if str(tenant_id) != "d3b07384-d113-4956-a5d2-64be7357c11d":
