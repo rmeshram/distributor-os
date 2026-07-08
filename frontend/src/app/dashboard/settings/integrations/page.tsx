@@ -35,26 +35,43 @@ export default function IntegrationsPage() {
   const [qrCodeBase64, setQrCodeBase64] = useState("");
   const [evolutionError, setEvolutionError] = useState("");
 
-  // Pre-fill instanceName with slugified tenant ID
+  // Pre-fill instanceName with slugified tenant ID, then verify live connection status
   useEffect(() => {
-    if (activeTenantId) {
-      setInstanceName(`dist-${activeTenantId.substring(0, 8)}`);
-    } else {
+    if (!activeTenantId) {
       setInstanceName("");
+      return;
     }
+    const name = `dist-${activeTenantId.substring(0, 8)}`;
+    setInstanceName(name);
+
+    // If we don't already know we're connected/connecting, query the actual instance state
+    // so the UI recovers correctly after a hard refresh or cross-page navigation.
+    setProvisioningStatus(prev => {
+      if (prev === "connected" || prev === "connecting") return prev;
+      return prev; // keep idle/error until we hear back from the API
+    });
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    fetch(`${apiBase}/api/v1/evolution/status?instance_name=${name}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.status === "open") {
+          setProvisioningStatus("connected");
+        }
+      })
+      .catch(() => {/* non-fatal — Evolution API may not be reachable */});
   }, [activeTenantId]);
 
   // Restore provisioning state when navigating back to this page
   useEffect(() => {
     const saved = sessionStorage.getItem(WA_STATUS_KEY);
-    if (saved === "connecting") {
-      setProvisioningStatus("connecting");
+    if (saved === "connecting" || saved === "connected") {
+      setProvisioningStatus(saved as "connecting" | "connected");
     }
   }, []);
 
   // Persist provisioning state so navigation away doesn't lose progress
   useEffect(() => {
-    if (provisioningStatus === "connecting") {
+    if (provisioningStatus === "connecting" || provisioningStatus === "connected") {
       sessionStorage.setItem(WA_STATUS_KEY, provisioningStatus);
     } else {
       sessionStorage.removeItem(WA_STATUS_KEY);
