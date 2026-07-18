@@ -366,10 +366,17 @@ def update_order_status(
         items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order_id).all()
 
         if payload.to_status == "Confirmed":
+            # Batch-fetch all products referenced by this order's line items in a single
+            # query (previously N+1: one SELECT per item, run twice over the same items).
+            _product_ids = {item.product_id for item in items}
+            _products_by_id = {
+                p.id: p for p in db.query(Product).filter(Product.id.in_(_product_ids)).all()
+            } if _product_ids else {}
+
             # Reject if any line item is still unmatched (must go through triage first)
             _unmatched_skus = {"UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU"}
             for item in items:
-                prod_check = db.query(Product).filter(Product.id == item.product_id).first()
+                prod_check = _products_by_id.get(item.product_id)
                 if prod_check and prod_check.sku_id in _unmatched_skus:
                     raise HTTPException(
                         status_code=400,
@@ -419,9 +426,10 @@ def update_order_status(
                     detail=f"Credit limit exceeded for customer '{customer.retailer_name}'. Combined balance: ₹{combined_balance:,.2f}, Credit Limit: ₹{customer.credit_limit:,.2f}"
                 )
 
-            # Resolve product variables dynamically
+            # Resolve product variables dynamically (uses the batch-fetched map above,
+            # no additional queries per item).
             for item in items:
-                prod_data = db.query(Product).filter(Product.id == item.product_id).first()
+                prod_data = _products_by_id.get(item.product_id)
                 if prod_data:
                     item.sku_code = prod_data.sku_id
                     item.product_name = prod_data.sku_id
@@ -429,13 +437,19 @@ def update_order_status(
                     item.sku_code = "UNKNOWN_SKU"
                     item.product_name = "Unknown Product"
 
-            # 5. Inventory Guardrail Validation Loop
-            for item in items:
-                # Find the corresponding inventory row for this tenant and SKU
-                inv_record = db.query(Inventory).filter(
+            # 5. Inventory Guardrail Validation Loop — batch-fetch all inventory rows for
+            # this order's SKUs in a single query instead of one SELECT per line item.
+            _sku_ids = {item.product_id for item in items}
+            _inventory_by_sku = {
+                inv.sku_id: inv
+                for inv in db.query(Inventory).filter(
                     Inventory.tenant_id == order.tenant_id,
-                    Inventory.sku_id == item.product_id  # Matches parent model ID mapping link
-                ).first()
+                    Inventory.sku_id.in_(_sku_ids)
+                ).all()
+            } if _sku_ids else {}
+
+            for item in items:
+                inv_record = _inventory_by_sku.get(item.product_id)
 
                 if not inv_record:
                     raise HTTPException(
@@ -1427,15 +1441,21 @@ def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
 
     tenant_context.set(order.tenant_id)
 
-    # Block confirmation if any line item is still unmatched
+    # Block confirmation if any line item is still unmatched.
+    # Batch-fetch all referenced products in a single query instead of one SELECT per item.
     _unmatched_skus = {"UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU"}
-    for item in order.line_items:
-        prod_check = db.get(Product, item.product_id)
-        if prod_check and prod_check.sku_id in _unmatched_skus:
-            raise HTTPException(
-                status_code=400,
-                detail="Cannot confirm order with unmatched SKUs. Resolve all items in triage first."
-            )
+    _product_ids = {item.product_id for item in order.line_items}
+    if _product_ids:
+        _products_by_id = {
+            p.id: p for p in db.query(Product).filter(Product.id.in_(_product_ids)).all()
+        }
+        for item in order.line_items:
+            prod_check = _products_by_id.get(item.product_id)
+            if prod_check and prod_check.sku_id in _unmatched_skus:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot confirm order with unmatched SKUs. Resolve all items in triage first."
+                )
 
     current_status = order.current_status
     db.add(OrderStateLedger(
